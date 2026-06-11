@@ -1,0 +1,320 @@
+DEADZONE — Systems & Gameplay Changes Implemented
+1. Player Velocity Tracking System
+File Modified:
+player.py
+What Was Added
+
+Added persistent movement velocity tracking:
+
+self.vel_x
+self.vel_y
+Why
+
+Previously:
+
+player movement only changed position,
+no stored velocity existed,
+AI could not predict movement direction.
+
+Now:
+
+zombies can estimate future player movement,
+movement systems become expandable,
+enables interception AI and advanced dodge systems.
+Changes Made
+Added in __init__()
+self.vel_x = 0.0
+self.vel_y = 0.0
+Modified _move()
+
+Old:
+
+self.x += nx * speed * dt
+self.y += ny * speed * dt
+
+New:
+
+self.vel_x = nx * speed
+self.vel_y = ny * speed
+
+self.x += self.vel_x * dt
+self.y += self.vel_y * dt
+Added stop reset logic
+
+When player stops moving:
+
+self.vel_x = 0.0
+self.vel_y = 0.0
+Modified dash system
+
+Updated _update_dash() so dash also updates velocity:
+
+self.vel_x = self._dash_vx
+self.vel_y = self._dash_vy
+2. Predictive Zombie AI System
+File Modified:
+zombie.py
+What Was Changed
+
+Previously zombies:
+
+directly chased current player position
+
+Now zombies:
+
+predict future player position
+
+using velocity prediction.
+
+Added Predictive Chase Logic
+
+Old:
+
+dx = player.x - self.x
+dy = player.y - self.y
+
+New:
+
+prediction_strength = 0.28
+
+target_x = player.x + player.vel_x * prediction_strength
+target_y = player.y + player.vel_y * prediction_strength
+
+dx = target_x - self.x
+dy = target_y - self.y
+Gameplay Result
+
+Zombies now:
+
+intercept movement,
+pressure movement paths,
+cut angles,
+reduce infinite kiting.
+
+This made gameplay:
+
+movement-based instead of pure backpedal shooting
+3. Zombie Momentum / Commitment System
+File Modified:
+zombie.py
+What Changed
+
+Zombie acceleration reduced.
+
+Old:
+
+accel = 8.0
+
+New:
+
+accel = 4.5
+Why
+
+This creates:
+
+movement commitment,
+slower directional snapping,
+juking opportunities,
+baiting gameplay.
+
+Zombies now:
+
+feel physical instead of aimbot-like
+4. Improved Zombie Separation System
+File Modified:
+collision.py
+What Changed
+
+Old:
+
+strength=0.5
+
+New:
+
+strength=0.9
+Result
+
+Zombie groups now:
+
+spread naturally,
+create dodge lanes,
+avoid excessive stacking,
+surround more effectively.
+5. Obstacle / Arena Architecture System
+New File Created:
+obstacle.py
+New System Added
+
+Created reusable obstacle entity architecture.
+
+Features:
+rectangle-based geometry,
+renderable structures,
+scalable map objects,
+tactical arena support.
+Obstacle Rendering Features
+
+Added:
+
+neon outline rendering,
+futuristic containment styling,
+shadows,
+layered visuals,
+rounded corner rendering.
+Obstacle Properties
+
+Each obstacle stores:
+
+x
+y
+w
+h
+rect
+color
+border
+6. Arena Geometry Generation System
+File Modified:
+game.py
+Added:
+self.obstacles
+
+inside Game state.
+
+Added Import
+from obstacle import Obstacle
+Added _generate_obstacles()
+
+Created arena geometry generation function.
+
+Current Arena Layout Includes
+central combat blocks,
+side cover zones,
+movement corridors,
+choke points,
+tactical lanes.
+Result
+
+The map changed from:
+
+empty debug arena
+
+to:
+
+structured combat space
+7. Obstacle Rendering Pipeline
+File Modified:
+game.py
+Added obstacle draw loop
+
+Inside _draw_world():
+
+for obstacle in self.obstacles:
+    obstacle.draw(self.screen, self.camera)
+Result
+
+Arena now visually contains:
+
+cover,
+structures,
+tactical geometry,
+environmental objects.
+8. Obstacle Collision System
+File Modified:
+collision.py
+Added obstacle collision support into main pipeline
+
+Modified:
+
+process(...)
+
+to accept:
+
+obstacles
+Added:
+_player_vs_obstacles()
+_zombies_vs_obstacles()
+Player Collision
+
+Player now:
+
+cannot move through geometry,
+slides against structures,
+collides using rectangle overlap resolution.
+Zombie Collision
+
+Zombies now:
+
+push around structures,
+navigate around geometry,
+funnel through corridors,
+get blocked by walls.
+Gameplay Result
+
+Combat now includes:
+
+tactical movement,
+chokepoints,
+path pressure,
+environmental positioning,
+escape routing.
+9. Arena Gameplay Evolution
+BEFORE
+
+Gameplay:
+
+run backwards and shoot endlessly
+
+Map:
+
+empty arena
+
+Movement:
+
+non-tactical
+AFTER
+
+Gameplay:
+
+movement pressure + positioning
+
+Map:
+
+combat arena with lanes and cover
+
+Movement:
+
+dodge-focused tactical movement
+10. Architectural Improvements
+
+The project evolved from:
+
+basic pygame shooter
+
+toward:
+
+modular combat-engine architecture
+Systems Design Improvements
+
+Added:
+
+predictive AI,
+reusable obstacle entities,
+centralized obstacle collision,
+tactical arena generation,
+geometry-aware combat flow.
+Technical Direction Established
+
+The architecture now supports future systems like:
+
+procedural arena generation,
+adaptive AI navigation,
+sector-based world generation,
+hazard zones,
+interactive props,
+AI directors,
+replay systems,
+data-driven layouts,
+dynamic difficulty systems,
+telemetry heatmaps,
+advanced enemy steering,
+deterministic procedural layouts.
