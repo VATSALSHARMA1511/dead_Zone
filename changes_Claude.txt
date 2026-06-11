@@ -1,320 +1,241 @@
-DEADZONE — Systems & Gameplay Changes Implemented
-1. Player Velocity Tracking System
-File Modified:
+DEADZONE — Full Project Context
+What It Is
+Top-down neon tactical zombie survival shooter built in Python + Pygame. Production-style project with AI integration, deployed backend, and analytics. Built for portfolio/resume purposes targeting product company placements.
+
+Tech Stack
+
+Game: Python, Pygame
+Backend: FastAPI, PostgreSQL, deployed on Railway
+AI: Groq API (llama-3.3-70b-versatile)
+RAG: ChromaDB + sentence-transformers (all-MiniLM-L6-v2)
+Deployment: Railway (auto-deploy from GitHub)
+GitHub: github.com/VATSALSHARMA1511/dead_Zone
+Live URL: https://deadzone-production-759b.up.railway.app
+
+
+Full File List
+main.py
+game.py
 player.py
-What Was Added
-
-Added persistent movement velocity tracking:
-
-self.vel_x
-self.vel_y
-Why
-
-Previously:
-
-player movement only changed position,
-no stored velocity existed,
-AI could not predict movement direction.
-
-Now:
-
-zombies can estimate future player movement,
-movement systems become expandable,
-enables interception AI and advanced dodge systems.
-Changes Made
-Added in __init__()
-self.vel_x = 0.0
-self.vel_y = 0.0
-Modified _move()
-
-Old:
-
-self.x += nx * speed * dt
-self.y += ny * speed * dt
-
-New:
-
-self.vel_x = nx * speed
-self.vel_y = ny * speed
-
-self.x += self.vel_x * dt
-self.y += self.vel_y * dt
-Added stop reset logic
-
-When player stops moving:
-
-self.vel_x = 0.0
-self.vel_y = 0.0
-Modified dash system
-
-Updated _update_dash() so dash also updates velocity:
-
-self.vel_x = self._dash_vx
-self.vel_y = self._dash_vy
-2. Predictive Zombie AI System
-File Modified:
 zombie.py
-What Was Changed
-
-Previously zombies:
-
-directly chased current player position
-
-Now zombies:
-
-predict future player position
-
-using velocity prediction.
-
-Added Predictive Chase Logic
-
-Old:
-
-dx = player.x - self.x
-dy = player.y - self.y
-
-New:
-
-prediction_strength = 0.28
-
-target_x = player.x + player.vel_x * prediction_strength
-target_y = player.y + player.vel_y * prediction_strength
-
-dx = target_x - self.x
-dy = target_y - self.y
-Gameplay Result
-
-Zombies now:
-
-intercept movement,
-pressure movement paths,
-cut angles,
-reduce infinite kiting.
-
-This made gameplay:
-
-movement-based instead of pure backpedal shooting
-3. Zombie Momentum / Commitment System
-File Modified:
-zombie.py
-What Changed
-
-Zombie acceleration reduced.
-
-Old:
-
-accel = 8.0
-
-New:
-
-accel = 4.5
-Why
-
-This creates:
-
-movement commitment,
-slower directional snapping,
-juking opportunities,
-baiting gameplay.
-
-Zombies now:
-
-feel physical instead of aimbot-like
-4. Improved Zombie Separation System
-File Modified:
+bullet.py
+camera.py
 collision.py
-What Changed
-
-Old:
-
-strength=0.5
-
-New:
-
-strength=0.9
-Result
-
-Zombie groups now:
-
-spread naturally,
-create dodge lanes,
-avoid excessive stacking,
-surround more effectively.
-5. Obstacle / Arena Architecture System
-New File Created:
+constants.py
+settings.py
+hud.py
+menus.py
+waves.py
 obstacle.py
-New System Added
+particles.py
+helpers.py
+sprite_store.py
+server.py
+rag_director.py
+player_name_store.py
+leaderboard.db
+requirements.txt
+Procfile
+.env
 
-Created reusable obstacle entity architecture.
+Every System Built
+1. Core Game Systems
 
-Features:
-rectangle-based geometry,
-renderable structures,
-scalable map objects,
-tactical arena support.
-Obstacle Rendering Features
+Top-down shooter, WASD movement, mouse aim, LMB shoot
+3 weapons: pistol, shotgun, SMG (1/2/3 or scroll to switch)
+Sprint (Shift), Dash with iframes (Space), stamina system
+HP-based movement penalties — slow at low health
+HP-based ammo drain — burns faster when hurt
+Streak multiplier — kill chain boosts score
+Screen shake on shoot, muzzle flash particles, blood particles
+Survival score — +wave_number points per second alive
 
-Added:
+2. Procedural Sector World
 
-neon outline rendering,
-futuristic containment styling,
-shadows,
-layered visuals,
-rounded corner rendering.
-Obstacle Properties
+3x3 grid of procedurally assigned sectors
+4 sector types: AI_CORE, QUARANTINE, CONTAINMENT, REACTOR
+Each has unique color palette, grid style, decals, accent border
+Pre-rendered to surface at game start for performance
+Tactical obstacles with collision — 8 fixed positions
 
-Each obstacle stores:
+3. Player System (player.py)
 
-x
-y
-w
-h
-rect
-color
-border
-6. Arena Geometry Generation System
-File Modified:
-game.py
-Added:
-self.obstacles
+Custom sprite support — uploadable photo, circular crop, rotation
+Dash trail visual, bob animation while sprinting
+Hit flash on damage, iframes after hit
+Gun barrel drawn on top of sprite always
+Fallback circle rendering if no photo uploaded
 
-inside Game state.
+4. Zombie System (zombie.py)
 
-Added Import
-from obstacle import Obstacle
-Added _generate_obstacles()
+4 types: normal, fast, tank, boss
+Custom sprite support per type
+Type ring indicators
+Smooth interpolation movement toward player
+8% speed increase per wave
+Attack rate system per type
 
-Created arena geometry generation function.
+5. AI Wave Director (waves.py)
 
-Current Arena Layout Includes
-central combat blocks,
-side cover zones,
-movement corridors,
-choke points,
-tactical lanes.
-Result
+Groq API called in background thread at END of each wave (during cooldown)
+Full wave history (last 5 waves) sent as context — kills, damage, accuracy, composition
+Wave-anchored zombie floor: min = max(6, 4 + next_wave * 2)
+Response fully validated and ratio-normalized before use
+Boss waves deterministic — every 5 waves, AI has no say
+Falls back to default composition if API fails or times out
+AI message displayed on HUD for 5 seconds per wave
 
-The map changed from:
+6. RAG Persistent Memory (rag_director.py)
 
-empty debug arena
+Full RAG pipeline: Embed → Store → Retrieve → Augment → Generate
+Each completed run converted to natural language summary
+Embedded using sentence-transformers (all-MiniLM-L6-v2), stored in ChromaDB
+Before each wave composition request, ChromaDB queried for similar past runs
+Top 3 similar runs injected into Groq prompt as additional context
+Persists to ./deadzone_memory/ folder locally across sessions
+Module-level singleton via rag_director.get()
+Fully graceful — if ChromaDB unavailable, game works normally
 
-to:
+7. Collision System (collision.py)
 
-structured combat space
-7. Obstacle Rendering Pipeline
-File Modified:
-game.py
-Added obstacle draw loop
+Centralised — all collision in one system, no circular imports
+Bullets vs zombies — returns hit count for accuracy tracking
+Player vs zombies — damage + iframes check
+Zombie separation — push-apart to prevent stacking
+Player vs obstacles — AABB resolution
+Zombie vs obstacles — AABB resolution with 0.7 damping
+Player + zombie world bounds clamping
 
-Inside _draw_world():
+8. Accuracy Tracking
 
-for obstacle in self.obstacles:
-    obstacle.draw(self.screen, self.camera)
-Result
+_bullets_fired incremented when player shoots
+_bullets_hit incremented from collision system return value every frame
+waves.stat_bullets_hit also updated for per-wave accuracy
+Accuracy calculated at game over: (hits / max(1, fired)) * 100
+Sent to Groq for game over analysis and wave director
 
-Arena now visually contains:
+9. HUD System (hud.py)
 
-cover,
-structures,
-tactical geometry,
-environmental objects.
-8. Obstacle Collision System
-File Modified:
-collision.py
-Added obstacle collision support into main pipeline
+Bottom panel: HP bar (color coded), stamina bar, dash cooldown arc
+Top bar: score, wave number, FPS, particle count, streak display
+Wave alert: countdown + "WAVE X INCOMING" / "⚠ BOSS WAVE" during cooldown
+Wave clear banner: "✓ WAVE CLEARED" fades in/out
+Weapon slots: 3 slots with ammo pips, active weapon highlighted
+Crosshair: custom drawn, follows mouse
+Reload indicator: arc around crosshair showing reload progress
+Wave summary panel: shown during cooldown, displays kills/accuracy/damage with letter grade S/A/B/C/D
 
-Modified:
+10. Game Over Screen (menus.py — GameOverScreen)
 
-process(...)
+Shows score, wave, kills, best score
+AI tactical analysis panel — threaded Groq call on game over
+"ANALYSING RUN..." animated dots while waiting
+Analysis fades in when ready
+Grade system based on performance
 
-to accept:
+11. Player Name Entry (menus.py — NameEntryScreen)
 
-obstacles
-Added:
-_player_vs_obstacles()
-_zombies_vs_obstacles()
-Player Collision
+Text input screen before sprite picker
+Max 12 characters, uppercase forced
+Stores in player_name_store.py module singleton
+Used on leaderboard instead of hardcoded "PLAYER"
 
-Player now:
+12. Sprite Picker (menus.py — SpritePickerScreen)
 
-cannot move through geometry,
-slides against structures,
-collides using rectangle overlap resolution.
-Zombie Collision
+Upload player photo and zombie photo via native file dialog
+Circular preview with checkmark badge
+Clear button per slot
+Skippable — defaults used if no photo chosen
 
-Zombies now:
+13. Backend (server.py)
+Endpoints:
 
-push around structures,
-navigate around geometry,
-funnel through corridors,
-get blocked by walls.
-Gameplay Result
+POST /score — submit run with name, score, wave, kills, ai_review
+GET /scores — top 10 leaderboard JSON
+GET / — leaderboard HTML page
+GET /analytics — analytics dashboard HTML page
+GET /analytics/summary — total runs, unique players, avg/best wave, best score, avg kills
+GET /analytics/wave-distribution — wave death distribution
+GET /analytics/accuracy-trend — last 20 runs for trend chart
+GET /analytics/top-players — per-player aggregated stats
 
-Combat now includes:
+DB schema:
+sqlCREATE TABLE scores (
+    id        SERIAL PRIMARY KEY,
+    name      TEXT    NOT NULL,
+    score     INTEGER NOT NULL,
+    wave      INTEGER NOT NULL,
+    kills     INTEGER NOT NULL,
+    posted_at TEXT    NOT NULL,
+    ai_review TEXT    DEFAULT ''
+)
+14. Score Posting Flow (game.py)
 
-tactical movement,
-chokepoints,
-path pressure,
-environmental positioning,
-escape routing.
-9. Arena Gameplay Evolution
-BEFORE
+_delayed_post thread waits up to 6 seconds for AI analysis to complete
+Posts score + AI review together in one request
+After posting, calls rag_director.get().store_run() to persist run to vector store
+Uses player_name_store.name for player name
 
-Gameplay:
+15. Analytics Dashboard (/analytics)
 
-run backwards and shoot endlessly
+Summary stat cards: total runs, unique players, avg wave, best wave, best score, avg kills
+Wave distribution bar chart — color coded, shows where players die most
+Score trend line chart — last 20 runs plotted on canvas
+Player stats table — best score, avg score, best wave, avg wave, total kills, run count
+Nav links between leaderboard and analytics
 
-Map:
+16. Leaderboard Page (/)
 
-empty arena
+Top 10 scores, auto-refreshes every 10 seconds
+AI review shown under each score in italic
+Gold/silver/bronze rank labels
+Nav link to analytics
 
-Movement:
 
-non-tactical
-AFTER
+Game Flow
+Main Menu → Name Entry → Sprite Picker → Game → Game Over
+                                           ↓
+                                      Wave Director (AI + RAG)
+                                           ↓
+                                      Score + AI Review → Railway DB
+                                           ↓
+                                      Run → ChromaDB (local RAG memory)
 
-Gameplay:
+State Machine (constants.py)
+pythonclass GameState(IntEnum):
+    MAIN_MENU     = auto()
+    NAME_ENTRY    = auto()
+    SPRITE_SELECT = auto()
+    PLAYING       = auto()
+    PAUSED        = auto()
+    GAME_OVER     = auto()
 
-movement pressure + positioning
+Key Architecture Decisions
 
-Map:
+All collision in one system — no circular imports, easy to optimize
+AI called in daemon threads — never blocks game loop
+RAG singleton — initialized once, shared across waves.py and game.py
+player_name_store.py module singleton — avoids passing name through constructors
+Boss waves deterministic — AI cannot override, always wave % 5 == 0
+Wave composition validated and normalized — model output never trusted blindly
+_delayed_post pattern — waits for async AI analysis before posting score
 
-combat arena with lanes and cover
 
-Movement:
+What's Left To Build (Priority Order)
 
-dodge-focused tactical movement
-10. Architectural Improvements
+Death heatmap — log player position + death location, generate heatmap image server-side with matplotlib, expose at /analytics/heatmap
+WebSocket live leaderboard — replace 10-second polling with FastAPI WebSocket
+Elite zombie types — Charger, Splitter, Cloaker with distinct behavior
+JWT auth + player profiles — register/login, per-player run history page
+Project website — cinematic single page, hero + features + leaderboard embed + download
+README — architecture diagram, feature list, tech stack, screenshots
 
-The project evolved from:
 
-basic pygame shooter
+Environment Variables Needed
+GROQ_API_KEY=your_key
+DATABASE_URL=postgresql://... (auto-set by Railway)
 
-toward:
-
-modular combat-engine architecture
-Systems Design Improvements
-
-Added:
-
-predictive AI,
-reusable obstacle entities,
-centralized obstacle collision,
-tactical arena generation,
-geometry-aware combat flow.
-Technical Direction Established
-
-The architecture now supports future systems like:
-
-procedural arena generation,
-adaptive AI navigation,
-sector-based world generation,
-hazard zones,
-interactive props,
-AI directors,
-replay systems,
-data-driven layouts,
-dynamic difficulty systems,
-telemetry heatmaps,
-advanced enemy steering,
-deterministic procedural layouts.
+Local Run
+bashpip install pygame fastapi psycopg2 groq chromadb sentence-transformers python-dotenv uvicorn
+python main.py        # game
+uvicorn server:app --reload  # backend locally

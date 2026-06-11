@@ -23,6 +23,7 @@ from obstacle import Obstacle
 from hud import HUD
 from menus import MainMenu, PauseMenu, GameOverScreen, SpritePickerScreen, NameEntryScreen
 import player_name_store
+import rag_director
 
 
 class Game:
@@ -72,7 +73,7 @@ class Game:
         self._load_audio()
 
         # ── Cursor ───────────────────────────────────────────────────────────
-        
+        pygame.mouse.set_visible(False)
 
     # ── Audio setup ──────────────────────────────────────────────────────────
 
@@ -334,14 +335,26 @@ class Game:
             kills_snap = self.kills
             gameover   = self.gameover
 
+            wave_history_snap = list(self.waves._wave_history)
+
             def _delayed_post():
                 import time
                 for _ in range(30):        # wait up to 6 seconds for AI
                     time.sleep(0.2)
                     if gameover._ai_done:
                         break
+                ai_text = gameover._ai_text
                 self._post_score(player_name_store.name, score_snap, wave_snap, kills_snap,
-                                 gameover._ai_text)
+                                 ai_text)
+                # Store run in RAG vector memory for future sessions
+                rag_director.get().store_run(
+                    player_name  = player_name_store.name,
+                    score        = score_snap,
+                    wave         = wave_snap,
+                    kills        = kills_snap,
+                    wave_history = wave_history_snap,
+                    ai_review    = ai_text,
+                )
 
             threading.Thread(target=_delayed_post, daemon=True).start()
         self.state = new_state
@@ -522,10 +535,6 @@ class Game:
     # ── Main draw ────────────────────────────────────────────────────────────
 
     def draw(self, fps: int) -> None:
-        if self.state == GameState.PLAYING:
-            pygame.mouse.set_visible(False)
-        else:
-            pygame.mouse.set_visible(True)
         if self.state == GameState.MAIN_MENU:
             self.main_menu.draw(self.screen)
             return

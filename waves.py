@@ -17,6 +17,7 @@ import os
 import json
 import settings
 from zombie import Zombie
+import rag_director
 
 try:
     from dotenv import load_dotenv
@@ -188,10 +189,21 @@ class WaveManager:
         min_zombies = max(6, 4 + next_wave * 2)
         max_zombies = min(60, 10 + next_wave * 4)
 
+        # Build current stats dict for RAG query
+        rag_query_stats = {
+            "next_wave":      next_wave,
+            "avg_accuracy":   recent_acc,
+            "avg_damage":     round(recent_dmg / max(1, len(history_snap)), 1),
+            "recent_kills":   recent_kills,
+        }
+
         def _call():
             try:
                 from groq import Groq
                 client = Groq(api_key=os.environ.get("GROQ_API_KEY", ""))
+
+                # Retrieve similar past runs from vector store
+                rag_context = rag_director.get().retrieve_context(rag_query_stats)
 
                 history_str = "\n".join(
                     f"  Wave {w['wave']}: {w['kills']} kills, "
@@ -207,7 +219,9 @@ class WaveManager:
                 prompt = f"""You are the AI director for DEADZONE, a neon tactical zombie shooter.
 Your job is to generate a zombie wave composition that creates a FAIR but ESCALATING challenge.
 
-=== RUN HISTORY (last {len(history_snap)} waves) ===
+{rag_context if rag_context else ""}
+
+=== CURRENT RUN HISTORY (last {len(history_snap)} waves) ===
 {history_str if history_str else "  No history yet — this is wave 1."}
 
 === LAST WAVE COMPOSITION ===
