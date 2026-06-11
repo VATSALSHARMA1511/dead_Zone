@@ -287,20 +287,28 @@ class Game:
 
     # ── Score POST ───────────────────────────────────────────────────────────
 
-    def _post_score(self, name, score, wave, kills):
+    def _post_score(self, name, score, wave, kills, ai_review=""):
         def _send():
             try:
-                data = json.dumps({"name": name, "score": score,
-                                   "wave": wave, "kills": kills}).encode()
-                req  = urllib.request.Request(
+                print(f"[POST] Sending score: {score}, wave: {wave}, kills: {kills}")
+                print(f"[POST] AI review length: {len(ai_review)} chars")
+                data = json.dumps({
+                    "name":      name,
+                    "score":     score,
+                    "wave":      wave,
+                    "kills":     kills,
+                    "ai_review": ai_review,
+                }).encode()
+                req = urllib.request.Request(
                     "https://deadzone-production-759b.up.railway.app/score",
                     data=data,
                     headers={"Content-Type": "application/json"},
                     method="POST"
                 )
-                urllib.request.urlopen(req, timeout=2)
-            except Exception:
-                pass
+                resp = urllib.request.urlopen(req, timeout=10)
+                print(f"[POST] Response: {resp.status}")
+            except Exception as e:
+                print(f"[POST] ERROR: {e}")
         threading.Thread(target=_send, daemon=True).start()
 
     # ── State machine ────────────────────────────────────────────────────────
@@ -319,7 +327,21 @@ class Game:
             self.gameover.set_results(
                 self.score, self.waves.wave_number, self.kills, self._best_score,
                 accuracy, time_alive, bullets_fired)
-            self._post_score("PLAYER", self.score, self.waves.wave_number, self.kills)
+            score_snap = self.score
+            wave_snap  = self.waves.wave_number
+            kills_snap = self.kills
+            gameover   = self.gameover
+
+            def _delayed_post():
+                import time
+                for _ in range(30):        # wait up to 6 seconds for AI
+                    time.sleep(0.2)
+                    if gameover._ai_done:
+                        break
+                self._post_score("PLAYER", score_snap, wave_snap, kills_snap,
+                                 gameover._ai_text)
+
+            threading.Thread(target=_delayed_post, daemon=True).start()
         self.state = new_state
 
     # ── Main update ──────────────────────────────────────────────────────────

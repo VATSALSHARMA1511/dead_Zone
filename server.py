@@ -39,8 +39,13 @@ def init_db():
             score     INTEGER NOT NULL,
             wave      INTEGER NOT NULL,
             kills     INTEGER NOT NULL,
-            posted_at TEXT    NOT NULL
+            posted_at TEXT    NOT NULL,
+            ai_review TEXT    DEFAULT ''
         )
+    """)
+    # Add column if table already exists without it
+    cur.execute("""
+        ALTER TABLE scores ADD COLUMN IF NOT EXISTS ai_review TEXT DEFAULT ''
     """)
     conn.commit()
     cur.close()
@@ -53,10 +58,11 @@ init_db()
 # ── Models ────────────────────────────────────────────────────────────────────
 
 class ScoreSubmission(BaseModel):
-    name:  str
-    score: int
-    wave:  int
-    kills: int
+    name:      str
+    score:     int
+    wave:      int
+    kills:     int
+    ai_review: str = ""
 
 
 # ── Routes ────────────────────────────────────────────────────────────────────
@@ -66,9 +72,9 @@ def submit_score(data: ScoreSubmission):
     conn = get_db()
     cur  = conn.cursor()
     cur.execute(
-        "INSERT INTO scores (name, score, wave, kills, posted_at) VALUES (%s, %s, %s, %s, %s)",
+        "INSERT INTO scores (name, score, wave, kills, posted_at, ai_review) VALUES (%s, %s, %s, %s, %s, %s)",
         (data.name[:20], data.score, data.wave, data.kills,
-         datetime.now().strftime("%Y-%m-%d %H:%M"))
+         datetime.now().strftime("%Y-%m-%d %H:%M"), data.ai_review[:800])
     )
     conn.commit()
     cur.close()
@@ -81,7 +87,7 @@ def get_scores():
     conn = get_db()
     cur  = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
     cur.execute(
-        "SELECT name, score, wave, kills, posted_at FROM scores ORDER BY score DESC LIMIT 10"
+        "SELECT name, score, wave, kills, posted_at, ai_review FROM scores ORDER BY score DESC LIMIT 10"
     )
     rows = cur.fetchall()
     cur.close()
@@ -161,6 +167,23 @@ def leaderboard_page():
       0%, 100% { opacity: 1; }
       50%       { opacity: 0.2; }
     }
+    .review-row td { padding: 0 16px 14px 16px; border-bottom: 1px solid #12151f; }
+    .review-row:hover td { background: #12151f; }
+    .ai-review {
+      color: #6a7590;
+      font-size: 12px;
+      line-height: 1.6;
+      font-style: italic;
+      letter-spacing: 0.3px;
+    }
+    .ai-tag {
+      color: #00dcb4;
+      font-style: normal;
+      font-size: 10px;
+      letter-spacing: 2px;
+      margin-right: 8px;
+      opacity: 0.7;
+    }
   </style>
 </head>
 <body>
@@ -204,6 +227,13 @@ def leaderboard_page():
             <td class="kills">${r.kills}</td>
             <td class="date">${r.posted_at}</td>
           </tr>
+          ${r.ai_review ? `
+          <tr class="review-row">
+            <td></td>
+            <td colspan="5" class="ai-review">
+              <span class="ai-tag">⚡ AI DIRECTOR</span>${r.ai_review}
+            </td>
+          </tr>` : ''}
         `).join('');
       } catch (e) {
         document.getElementById('rows').innerHTML =
