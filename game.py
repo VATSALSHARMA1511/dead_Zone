@@ -21,7 +21,8 @@ from waves import WaveManager
 from obstacle import Obstacle
 
 from hud import HUD
-from menus import MainMenu, PauseMenu, GameOverScreen, SpritePickerScreen
+from menus import MainMenu, PauseMenu, GameOverScreen, SpritePickerScreen, NameEntryScreen
+import player_name_store
 
 
 class Game:
@@ -45,6 +46,7 @@ class Game:
         self.pause_menu    = PauseMenu(self.sw, self.sh)
         self.gameover      = GameOverScreen(self.sw, self.sh)
         self.sprite_picker = SpritePickerScreen(self.sw, self.sh)
+        self.name_entry    = NameEntryScreen(self.sw, self.sh)
 
         # ── State ───────────────────────────────────────────────────────────
         self.state       = GameState.MAIN_MENU
@@ -70,7 +72,7 @@ class Game:
         self._load_audio()
 
         # ── Cursor ───────────────────────────────────────────────────────────
-        pygame.mouse.set_visible(False)
+        
 
     # ── Audio setup ──────────────────────────────────────────────────────────
 
@@ -338,7 +340,7 @@ class Game:
                     time.sleep(0.2)
                     if gameover._ai_done:
                         break
-                self._post_score("PLAYER", score_snap, wave_snap, kills_snap,
+                self._post_score(player_name_store.name, score_snap, wave_snap, kills_snap,
                                  gameover._ai_text)
 
             threading.Thread(target=_delayed_post, daemon=True).start()
@@ -349,6 +351,8 @@ class Game:
     def update(self, dt: float, events: list) -> None:
         if self.state == GameState.MAIN_MENU:
             self._update_main_menu(dt, events)
+        elif self.state == GameState.NAME_ENTRY:
+            self._update_name_entry(dt, events)
         elif self.state == GameState.SPRITE_SELECT:
             self._update_sprite_select(dt, events)
         elif self.state == GameState.PLAYING:
@@ -363,10 +367,19 @@ class Game:
         for event in events:
             action = self.main_menu.handle_event(event)
             if action == "start":
-                self.state = GameState.SPRITE_SELECT
+                self.state = GameState.NAME_ENTRY
             elif action == "quit":
                 pygame.quit()
                 raise SystemExit
+
+    def _update_name_entry(self, dt: float, events: list) -> None:
+        self.name_entry.update(dt)
+        for event in events:
+            action = self.name_entry.handle_event(event)
+            if action == "confirm":
+                self.state = GameState.SPRITE_SELECT
+            elif action == "back":
+                self.state = GameState.MAIN_MENU
 
     def _update_sprite_select(self, dt: float, events: list) -> None:
         self.sprite_picker.update(dt)
@@ -454,7 +467,7 @@ class Game:
         for bullet in self.bullets:
             bullet.update(dt)
 
-        self.collision.process(
+        hits = self.collision.process(
             self.player,
             self.bullets,
             self.zombies,
@@ -462,6 +475,8 @@ class Game:
             self.particles,
             self.camera
         )
+        self._bullets_hit += hits
+        self.waves.stat_bullets_hit += hits
 
         # ── Dead entity cleanup + scoring ─────────────────────────────────
         for zombie in self.zombies:
@@ -507,8 +522,16 @@ class Game:
     # ── Main draw ────────────────────────────────────────────────────────────
 
     def draw(self, fps: int) -> None:
+        if self.state == GameState.PLAYING:
+            pygame.mouse.set_visible(False)
+        else:
+            pygame.mouse.set_visible(True)
         if self.state == GameState.MAIN_MENU:
             self.main_menu.draw(self.screen)
+            return
+
+        if self.state == GameState.NAME_ENTRY:
+            self.name_entry.draw(self.screen)
             return
 
         if self.state == GameState.SPRITE_SELECT:
@@ -547,3 +570,5 @@ class Game:
             self.hud.draw(self.screen, self.player, self.waves,
                         self.score, fps, self.particles.count,
                         self._streak)
+            if self.waves.in_cooldown:
+                self.hud.draw_wave_summary(self.screen, self.waves)

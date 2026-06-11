@@ -8,6 +8,7 @@ import pygame
 import settings
 from helpers import clamp
 import sprite_store
+import player_name_store
 
 
 class _Button:
@@ -444,7 +445,7 @@ class PauseMenu:
         overlay.fill((0, 0, 0, 160))
         surface.blit(overlay, (0, 0))
 
-        pw, ph = 340, 340
+        pw, ph = 340, 420
         panel  = pygame.Surface((pw, ph), pygame.SRCALPHA)
         panel.fill((10, 14, 24, 230))
         pygame.draw.rect(panel, settings.C_PLAYER, (0, 0, pw, ph), 2, border_radius=8)
@@ -459,7 +460,7 @@ class PauseMenu:
             btn.draw(surface)
 
         hint = self._font_hint.render("ESC to resume", True, settings.C_MID_GRAY)
-        surface.blit(hint, (self.sw // 2 - hint.get_width() // 2, py + ph - 30))
+        surface.blit(hint, (self.sw // 2 - hint.get_width() // 2, py + ph + 10))
 
 
 # ─── Game Over Screen ─────────────────────────────────────────────────────────
@@ -476,10 +477,10 @@ class GameOverScreen:
         cx = screen_w // 2
         cy = screen_h // 2
         self._buttons = [
-            _Button(cx, cy + 240, 240, 48, "PLAY AGAIN", self._font_btn, "restart"),
-            _Button(cx, cy + 306, 240, 48, "MAIN MENU",  self._font_btn, "main_menu",
+            _Button(cx, cy + 200, 240, 48, "PLAY AGAIN", self._font_btn, "restart"),
+            _Button(cx, cy + 260, 240, 48, "MAIN MENU",  self._font_btn, "main_menu",
                     color_normal=(20, 30, 50)),
-            _Button(cx, cy + 372, 240, 48, "QUIT",       self._font_btn, "quit",
+            _Button(cx, cy + 320, 240, 48, "QUIT",       self._font_btn, "quit",
                     color_normal=(40, 20, 20), color_hover=(80, 30, 30)),
         ]
         self._t          = 0.0
@@ -510,34 +511,35 @@ class GameOverScreen:
         import threading
         threading.Thread(
             target=self._fetch_analysis,
-            args=(score, wave, kills, time_alive, bullets_fired),
+            args=(score, wave, kills, accuracy, time_alive, bullets_fired),
             daemon=True
         ).start()
 
-    def _fetch_analysis(self, score, wave, kills, time_alive, bullets_fired):
+    def _fetch_analysis(self, score, wave, kills,accuracy, time_alive, bullets_fired):
         try:
             import os
             from groq import Groq
             client = Groq(api_key=os.environ.get("GROQ_API_KEY", ""))
 
             prompt = f"""You are a brutally honest tactical analyst for DEADZONE, a zombie survival game.
-Analyse this player's run in exactly 200 characters. Be specific, direct, slightly sarcastic.
-Do NOT use bullet points. Just 200 characters.
+Analyse this player's run in exactly 2 sentences. Be specific, direct, and sarcastically funny — like a coach who's seen better but still cares.
 
 Run stats:
 - Score: {score}
 - Waves survived: {wave}
 - Kills: {kills}
+- Accuracy: {accuracy:.1f}%
 - Time alive: {time_alive} seconds
 - Bullets fired: {bullets_fired}
 
-Give tactical feedback on what they did well and what killed them."""
+Use the exact numbers. End with one sentence starting with "NEXT TIME:" giving one specific tip targeting their worst stat. 3 sentences total, plain text, no bullet points."""
 
             response = client.chat.completions.create(
                 model="llama-3.3-70b-versatile",
                 messages=[{"role": "user", "content": prompt}],
                 temperature=0.8,
                 max_tokens=120,
+                timeout=8,
             )
             raw = response.choices[0].message.content.strip()
             # Word wrap at ~60 chars per line
@@ -554,7 +556,7 @@ Give tactical feedback on what they did well and what killed them."""
                 lines.append(cur_line)
             self._ai_text = "\n".join(lines)
         except Exception as e:
-            self._ai_text = "Analysis unavailable."
+            self._ai_text = f"Error: {e}"
         finally:
             self._ai_pending = False
             self._ai_done    = True
@@ -606,7 +608,7 @@ Give tactical feedback on what they did well and what killed them."""
         if self._t > 0.8:
             panel_y = cy - 10
             panel_w = 680
-            panel_h = 120
+            panel_h = 160
             panel   = pygame.Surface((panel_w, panel_h), pygame.SRCALPHA)
             panel.fill((10, 5, 5, 180))
             pygame.draw.rect(panel, (80, 20, 20), (0, 0, panel_w, panel_h), 1,
@@ -628,7 +630,7 @@ Give tactical feedback on what they did well and what killed them."""
                 alpha    = min(255, int((self._t - 0.8) * 150))
                 lines    = self._ai_text.split("\n")
                 line_y   = panel_y + 30
-                for line in lines[:5]:   # max 3 lines
+                for line in lines[:5]:   # max 5 lines
                     ls = self._font_ai.render(line, True, (220, 200, 200))
                     ls.set_alpha(alpha)
                     surface.blit(ls, (cx - panel_w // 2 + 12, line_y))
@@ -638,3 +640,128 @@ Give tactical feedback on what they did well and what killed them."""
         if self._t > 1.0:
             for btn in self._buttons:
                 btn.draw(surface)
+
+
+# ─── Name Entry Screen ────────────────────────────────────────────────────────
+
+class NameEntryScreen:
+    """
+    Simple text input screen shown before sprite picker.
+    Player types their name (max 12 chars), hits ENTER or clicks CONFIRM.
+    Stores result in player_name_store.name.
+    """
+
+    MAX_LEN = 12
+
+    def __init__(self, screen_w: int, screen_h: int) -> None:
+        self.sw, self.sh = screen_w, screen_h
+        pygame.font.init()
+
+        self._font_title  = pygame.font.SysFont("consolas,monospace", 48, bold=True)
+        self._font_input  = pygame.font.SysFont("consolas,monospace", 42, bold=True)
+        self._font_hint   = pygame.font.SysFont("consolas,monospace", 16)
+        self._font_btn    = pygame.font.SysFont("consolas,monospace", 22, bold=True)
+
+        self._text        = ""
+        self._cursor_t    = 0.0
+        self._t           = 0.0
+        self._error       = ""
+        self._error_t     = 0.0
+
+        cx = screen_w // 2
+        cy = screen_h // 2
+
+        self._btn_confirm = _Button(cx, cy + 100, 240, 48, "CONFIRM",
+                                    self._font_btn, "confirm",
+                                    color_normal=(20, 60, 40), color_hover=(30, 110, 70),
+                                    text_color=settings.C_PLAYER_ACCENT)
+        self._btn_back    = _Button(cx, cy + 162, 200, 40, "BACK",
+                                    self._font_btn, "back",
+                                    color_normal=(30, 30, 40), color_hover=(50, 50, 70))
+
+    def update(self, dt: float) -> None:
+        self._t        += dt
+        self._cursor_t += dt
+        self._error_t   = max(0.0, self._error_t - dt)
+        mp = pygame.mouse.get_pos()
+        self._btn_confirm.update(dt, mp)
+        self._btn_back.update(dt, mp)
+
+    def handle_event(self, event) -> str | None:
+        if event.type == pygame.KEYDOWN:
+            if event.key == pygame.K_RETURN or event.key == pygame.K_KP_ENTER:
+                return self._confirm()
+            elif event.key == pygame.K_ESCAPE:
+                return "back"
+            elif event.key == pygame.K_BACKSPACE:
+                self._text = self._text[:-1]
+            else:
+                char = event.unicode
+                if char and char.isprintable() and len(self._text) < self.MAX_LEN:
+                    self._text += char.upper()
+
+        if self._btn_confirm.handle_event(event) == "confirm":
+            return self._confirm()
+        if self._btn_back.handle_event(event) == "back":
+            return "back"
+
+        return None
+
+    def _confirm(self) -> str | None:
+        name = self._text.strip()
+        if not name:
+            self._error   = "Enter a name first."
+            self._error_t = 2.5
+            return None
+        player_name_store.name = name[:self.MAX_LEN]
+        return "confirm"
+
+    def draw(self, surface: pygame.Surface) -> None:
+        surface.fill(settings.C_BG)
+
+        # Grid background
+        grid_surf = pygame.Surface((self.sw, self.sh), pygame.SRCALPHA)
+        spacing = 64
+        for x in range(0, self.sw + spacing, spacing):
+            pygame.draw.line(grid_surf, (*settings.C_GRID, 100), (x, 0), (x, self.sh))
+        for y in range(0, self.sh + spacing, spacing):
+            pygame.draw.line(grid_surf, (*settings.C_GRID, 100), (0, y), (self.sw, y))
+        surface.blit(grid_surf, (0, 0))
+
+        cx = self.sw // 2
+        cy = self.sh // 2
+
+        # Title
+        title = self._font_title.render("ENTER YOUR NAME", True, settings.C_WHITE)
+        surface.blit(title, (cx - title.get_width() // 2, cy - 160))
+
+        hint = self._font_hint.render(
+            f"Max {self.MAX_LEN} characters  •  Shows on leaderboard",
+            True, settings.C_MID_GRAY)
+        surface.blit(hint, (cx - hint.get_width() // 2, cy - 105))
+
+        # Input box
+        box_w, box_h = 420, 64
+        box_x = cx - box_w // 2
+        box_y = cy - box_h // 2 - 10
+
+        pygame.draw.rect(surface, (14, 18, 28), (box_x, box_y, box_w, box_h), border_radius=6)
+        pygame.draw.rect(surface, settings.C_PLAYER, (box_x, box_y, box_w, box_h), 2, border_radius=6)
+
+        display = self._text
+        cursor_visible = int(self._cursor_t * 2) % 2 == 0
+        if cursor_visible:
+            display += "_"
+
+        text_surf = self._font_input.render(display, True, settings.C_PLAYER_ACCENT)
+        surface.blit(text_surf, (cx - text_surf.get_width() // 2,
+                                  box_y + box_h // 2 - text_surf.get_height() // 2))
+
+        # Buttons
+        self._btn_confirm.draw(surface)
+        self._btn_back.draw(surface)
+
+        # Error
+        if self._error_t > 0:
+            err = self._font_hint.render(self._error, True, settings.C_ACCENT_RED)
+            surface.blit(err, (cx - err.get_width() // 2, cy + 210))

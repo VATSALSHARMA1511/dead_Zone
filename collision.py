@@ -30,24 +30,26 @@ class CollisionSystem:
         self.world_h = world_h
 
     def process(self, player, bullets: list, zombies: list,obstacles: list,
-                particles, camera) -> None:
+                particles, camera) -> int:
         """
         Main entry point called once per frame.
-        Mutates entities in-place; never returns values.
+        Mutates entities in-place; returns number of bullets that hit zombies.
         """
-        self._bullets_vs_zombies(bullets, zombies, particles)
+        hits = self._bullets_vs_zombies(bullets, zombies, particles)
         self._player_vs_zombies(player, zombies, particles, camera)
         self._zombie_separation(zombies)
         self._player_vs_obstacles(player, obstacles)
         self._zombies_vs_obstacles(zombies, obstacles)
         self._clamp_player(player)
         self._clamp_zombies(zombies)
+        return hits
 
     # ── Collision tests ───────────────────────────────────────────────────────
 
     def _bullets_vs_zombies(self, bullets: list, zombies: list,
-                             particles) -> None:
+                             particles) -> int:
         to_remove_bullets = set()
+        hits = 0
         for bi, bullet in enumerate(bullets):
             if not bullet.alive:
                 continue
@@ -56,7 +58,6 @@ class CollisionSystem:
                     continue
                 if circles_overlap(bullet.x, bullet.y, settings.BULLET_RADIUS,
                                    zombie.x, zombie.y, zombie.radius):
-                    # Direction from zombie toward bullet origin (recoil direction)
                     dx = bullet.vx
                     dy = bullet.vy
                     length = (dx*dx + dy*dy) ** 0.5
@@ -69,11 +70,13 @@ class CollisionSystem:
                     particles.spawn_blood(zombie.x, zombie.y, (dx, dy))
 
                     to_remove_bullets.add(bi)
+                    hits += 1
                     break  # one bullet hits one zombie
 
-        # Remove consumed bullets (reverse order preserves indices)
         for i in sorted(to_remove_bullets, reverse=True):
             bullets[i].alive = False
+
+        return hits
 
     def _player_vs_zombies(self, player, zombies: list,
                             particles, camera) -> None:

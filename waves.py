@@ -360,3 +360,8 @@ Ratios must sum to exactly 1.0."""
     @property
     def ai_message(self) -> str:
         return self._ai_message if self._ai_message_timer > 0 else ""
+
+    @property
+    def last_wave_stats(self) -> dict | None:
+        """Returns the most recent completed wave record, or None if no wave done yet."""
+        return self._wave_history[-1] if self._wave_history else None

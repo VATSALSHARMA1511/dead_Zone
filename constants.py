@@ -13,6 +13,7 @@ from enum import IntEnum, auto
 class GameState(IntEnum):
     """Top-level state machine for the game loop."""
     MAIN_MENU     = auto()
+    NAME_ENTRY    = auto()
     SPRITE_SELECT = auto()
     PLAYING       = auto()
     PAUSED        = auto()
