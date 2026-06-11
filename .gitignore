@@ -9,3 +9,4 @@ dist/
 *.apk
 *.zip
 *.tar.gz
+.env

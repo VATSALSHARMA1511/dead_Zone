@@ -27,6 +27,8 @@ from menus import MainMenu, PauseMenu, GameOverScreen, SpritePickerScreen
 class Game:
     def __init__(self, screen: pygame.Surface) -> None:
         self.screen   = screen
+        self._bullets_fired = 0
+        self._bullets_hit   = 0
         self.sw       = settings.SCREEN_W
         self.sh       = settings.SCREEN_H
         self.ww       = settings.WORLD_W
@@ -266,6 +268,8 @@ class Game:
         for x, y, w, h in obstacle_data:
             self.obstacles.append(Obstacle(x, y, w, h))
     def _start_new_game(self) -> None:
+        self._bullets_fired = 0
+        self._bullets_hit   = 0
         cx, cy           = self.ww // 2, self.wh // 2
         self.player      = Player(cx, cy)
         self.zombies     = []
@@ -289,7 +293,7 @@ class Game:
                 data = json.dumps({"name": name, "score": score,
                                    "wave": wave, "kills": kills}).encode()
                 req  = urllib.request.Request(
-                    "http://localhost:8000/score",
+                    "https://deadzone-production-759b.up.railway.app/score",
                     data=data,
                     headers={"Content-Type": "application/json"},
                     method="POST"
@@ -301,13 +305,20 @@ class Game:
 
     # ── State machine ────────────────────────────────────────────────────────
 
+    # ── State machine ────────────────────────────────────────────────────────
+
     def change_state(self, new_state: GameState) -> None:
         if new_state == GameState.PLAYING and self.state != GameState.PAUSED:
             self._start_new_game()
         if new_state == GameState.GAME_OVER:
             self._best_score = max(self._best_score, self.score)
+            bullets_fired = getattr(self, '_bullets_fired', 0)
+            bullets_hit   = getattr(self, '_bullets_hit', 0)
+            accuracy      = (bullets_hit / max(1, bullets_fired)) * 100
+            time_alive    = int(self.waves.stat_time_alive)
             self.gameover.set_results(
-                self.score, self.waves.wave_number, self.kills, self._best_score)
+                self.score, self.waves.wave_number, self.kills, self._best_score,
+                accuracy, time_alive, bullets_fired)
             self._post_score("PLAYER", self.score, self.waves.wave_number, self.kills)
         self.state = new_state
 
@@ -369,6 +380,7 @@ class Game:
                 raise SystemExit
 
     def _update_playing(self, dt: float, events: list) -> None:
+
         keys           = pygame.key.get_pressed()
         fire_pressed   = pygame.mouse.get_pressed()[0]
         mouse_screen   = pygame.mouse.get_pos()
@@ -411,6 +423,7 @@ class Game:
             self._play_sfx("reload")
 
         self.bullets.extend(new_bullets)
+        self._bullets_fired += len(new_bullets)
 
         for zombie in self.zombies:
             if zombie.alive:
@@ -436,6 +449,7 @@ class Game:
                 multiplier   = max(1, self._streak // 5)
                 self.score  += zombie.score_value * multiplier
                 self.kills  += 1
+                self.waves.stat_kills_this_wave += 1
                 self.particles.spawn_zombie_death(
                     zombie.x, zombie.y, zombie.base_color)
                 self._play_sfx("zombie_die")
@@ -497,19 +511,17 @@ class Game:
             obstacle.draw(self.screen, self.camera)
         for bullet in self.bullets:
             bullet.draw(self.screen, self.camera)
-
         for zombie in self.zombies:
             if self.camera.is_visible(zombie.x, zombie.y, margin=60):
                 zombie.draw(self.screen, self.camera)
-
         if self.player and self.player.alive:
             self.player.draw(self.screen, self.camera)
-
         self.particles.draw(self.screen, self.camera)
-
-        
-
         if self.state == GameState.PLAYING and self.player:
+            if self.waves.ai_message:
+                font = pygame.font.SysFont("consolas,monospace", 20, bold=True)
+                msg  = font.render(f"⚡ AI DIRECTOR: {self.waves.ai_message}", True, (255, 50, 50))
+                self.screen.blit(msg, (self.sw // 2 - msg.get_width() // 2, 120))
             self.hud.draw(self.screen, self.player, self.waves,
-                          self.score, fps, self.particles.count,
-                          self._streak)
+                        self.score, fps, self.particles.count,
+                        self._streak)

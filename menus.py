@@ -467,30 +467,97 @@ class PauseMenu:
 class GameOverScreen:
     def __init__(self, screen_w, screen_h):
         self.sw, self.sh = screen_w, screen_h
-        self._font_big  = pygame.font.SysFont("consolas,monospace", 72, bold=True)
-        self._font_med  = pygame.font.SysFont("consolas,monospace", 28)
-        self._font_btn  = pygame.font.SysFont("consolas,monospace", 24, bold=True)
+        self._font_big   = pygame.font.SysFont("consolas,monospace", 72, bold=True)
+        self._font_med   = pygame.font.SysFont("consolas,monospace", 28)
+        self._font_btn   = pygame.font.SysFont("consolas,monospace", 24, bold=True)
+        self._font_sm    = pygame.font.SysFont("consolas,monospace", 16)
+        self._font_ai    = pygame.font.SysFont("consolas,monospace", 17)
 
         cx = screen_w // 2
         cy = screen_h // 2
         self._buttons = [
-            _Button(cx, cy + 80,  240, 48, "PLAY AGAIN", self._font_btn, "restart"),
-            _Button(cx, cy + 146, 240, 48, "MAIN MENU",  self._font_btn, "main_menu",
+            _Button(cx, cy + 240, 240, 48, "PLAY AGAIN", self._font_btn, "restart"),
+            _Button(cx, cy + 306, 240, 48, "MAIN MENU",  self._font_btn, "main_menu",
                     color_normal=(20, 30, 50)),
-            _Button(cx, cy + 212, 240, 48, "QUIT",       self._font_btn, "quit",
+            _Button(cx, cy + 372, 240, 48, "QUIT",       self._font_btn, "quit",
                     color_normal=(40, 20, 20), color_hover=(80, 30, 30)),
         ]
-        self._t = 0.0
-        self._score = self._wave = self._kills = self._best_score = 0
-        self._new_best = False
+        self._t          = 0.0
+        self._score      = 0
+        self._wave       = 0
+        self._kills      = 0
+        self._best_score = 0
+        self._new_best   = False
 
-    def set_results(self, score, wave, kills, best_score):
+        # AI analysis
+        self._ai_text    = ""        # filled by background thread
+        self._ai_pending = False
+        self._ai_done    = False
+
+    def set_results(self, score, wave, kills, best_score,
+                    accuracy=0.0, time_alive=0, bullets_fired=0):
         self._score      = score
         self._wave       = wave
         self._kills      = kills
         self._best_score = best_score
         self._new_best   = (score >= best_score)
         self._t          = 0.0
+        self._ai_text    = ""
+        self._ai_done    = False
+        self._ai_pending = True
+
+        # Fire AI analysis in background
+        import threading
+        threading.Thread(
+            target=self._fetch_analysis,
+            args=(score, wave, kills, time_alive, bullets_fired),
+            daemon=True
+        ).start()
+
+    def _fetch_analysis(self, score, wave, kills, time_alive, bullets_fired):
+        try:
+            import os
+            from groq import Groq
+            client = Groq(api_key=os.environ.get("GROQ_API_KEY", ""))
+
+            prompt = f"""You are a brutally honest tactical analyst for DEADZONE, a zombie survival game.
+Analyse this player's run in exactly 200 characters. Be specific, direct, slightly sarcastic.
+Do NOT use bullet points. Just 200 characters.
+
+Run stats:
+- Score: {score}
+- Waves survived: {wave}
+- Kills: {kills}
+- Time alive: {time_alive} seconds
+- Bullets fired: {bullets_fired}
+
+Give tactical feedback on what they did well and what killed them."""
+
+            response = client.chat.completions.create(
+                model="llama-3.3-70b-versatile",
+                messages=[{"role": "user", "content": prompt}],
+                temperature=0.8,
+                max_tokens=120,
+            )
+            raw = response.choices[0].message.content.strip()
+            # Word wrap at ~60 chars per line
+            words    = raw.split()
+            lines    = []
+            cur_line = ""
+            for word in words:
+                if len(cur_line) + len(word) + 1 > 62:
+                    lines.append(cur_line)
+                    cur_line = word
+                else:
+                    cur_line = (cur_line + " " + word).strip()
+            if cur_line:
+                lines.append(cur_line)
+            self._ai_text = "\n".join(lines)
+        except Exception as e:
+            self._ai_text = "Analysis unavailable."
+        finally:
+            self._ai_pending = False
+            self._ai_done    = True
 
     def update(self, dt):
         self._t += dt
@@ -515,11 +582,13 @@ class GameOverScreen:
         cx = self.sw // 2
         cy = self.sh // 2
 
+        # Title
         slide   = clamp(self._t * 3, 0.0, 1.0)
-        title_y = int(cy - 160 - (1 - slide) * 80)
+        title_y = int(cy - 220 - (1 - slide) * 80)
         title   = self._font_big.render("YOU DIED", True, settings.C_ACCENT_RED)
         surface.blit(title, (cx - title.get_width() // 2, title_y))
 
+        # Stats
         if self._t > 0.4:
             stats = [
                 ("SCORE", f"{self._score:,}"),
@@ -531,8 +600,41 @@ class GameOverScreen:
                 alpha = min(255, int((self._t - 0.4 - i * 0.1) * 500))
                 lsurf = self._font_med.render(f"{label:<8}{value:>10}", True, settings.C_WHITE)
                 lsurf.set_alpha(alpha)
-                surface.blit(lsurf, (cx - lsurf.get_width() // 2, cy - 50 + i * 32))
+                surface.blit(lsurf, (cx - lsurf.get_width() // 2, cy - 130 + i * 32))
 
+        # AI Analysis panel
+        if self._t > 0.8:
+            panel_y = cy - 10
+            panel_w = 680
+            panel_h = 120
+            panel   = pygame.Surface((panel_w, panel_h), pygame.SRCALPHA)
+            panel.fill((10, 5, 5, 180))
+            pygame.draw.rect(panel, (80, 20, 20), (0, 0, panel_w, panel_h), 1,
+                             border_radius=6)
+            surface.blit(panel, (cx - panel_w // 2, panel_y))
+
+            # Label
+            lbl = self._font_sm.render("⚡ AI TACTICAL ANALYSIS", True, (180, 40, 40))
+            surface.blit(lbl, (cx - panel_w // 2 + 12, panel_y + 8))
+
+            if self._ai_pending:
+                # Animated dots while waiting
+                dots    = "." * (int(self._t * 3) % 4)
+                waiting = self._font_sm.render(f"ANALYSING RUN{dots}", True, (100, 100, 100))
+                surface.blit(waiting, (cx - waiting.get_width() // 2, panel_y + 38))
+
+            elif self._ai_done and self._ai_text:
+                # Fade in analysis text
+                alpha    = min(255, int((self._t - 0.8) * 150))
+                lines    = self._ai_text.split("\n")
+                line_y   = panel_y + 30
+                for line in lines[:5]:   # max 3 lines
+                    ls = self._font_ai.render(line, True, (220, 200, 200))
+                    ls.set_alpha(alpha)
+                    surface.blit(ls, (cx - panel_w // 2 + 12, line_y))
+                    line_y += 22
+
+        # Buttons
         if self._t > 1.0:
             for btn in self._buttons:
                 btn.draw(surface)
