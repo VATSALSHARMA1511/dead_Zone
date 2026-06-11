@@ -1,0 +1,11 @@
+__pycache__/
+*.pyc
+build/
+dist/
+*.db
+*.spec
+.vscode/
+*.exe
+*.apk
+*.zip
+*.tar.gz
