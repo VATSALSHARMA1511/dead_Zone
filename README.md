@@ -9,9 +9,9 @@
 ![Groq](https://img.shields.io/badge/LLM-Groq%20%2F%20LLaMA3-orange)
 ![ChromaDB](https://img.shields.io/badge/RAG-ChromaDB-purple)
 
-**Project site:** https://deadzone-production-759b.up.railway.app  
-**Leaderboard:** https://deadzone-production-759b.up.railway.app  
-**Analytics:** https://deadzone-production-759b.up.railway.app/analytics
+**Project site:** https://deadzone-production-4446.up.railway.app  
+**Leaderboard:** https://deadzone-production-4446.up.railway.app  
+**Analytics:** https://deadzone-production-4446.up.railway.app/analytics
 
 ---
 
