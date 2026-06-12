@@ -307,7 +307,7 @@ class Game:
                 if token:
                     headers["Authorization"] = f"Bearer {token}"
                 req = urllib.request.Request(
-                    "https://deadzone-production-759b.up.railway.app/score",
+                    "https://deadzone-production-4446.up.railway.app/score",
                     data=data,
                     headers=headers,
                     method="POST"
@@ -377,7 +377,7 @@ class Game:
                 "world_w": self.ww, "world_h": self.wh,
             }).encode()
             req = urllib.request.Request(
-                "https://deadzone-production-759b.up.railway.app/heatmap/death",
+                "https://deadzone-production-4446.up.railway.app/heatmap/death",
                 data=data,
                 headers={"Content-Type": "application/json"},
                 method="POST"

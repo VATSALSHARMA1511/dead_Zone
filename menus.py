@@ -654,7 +654,7 @@ class AuthScreen:
     """
 
     MAX_LEN  = 20
-    BASE_URL = "https://deadzone-production-759b.up.railway.app"
+    BASE_URL = "https://deadzone-production-4446.up.railway.app"
 
     def __init__(self, screen_w: int, screen_h: int) -> None:
         self.sw, self.sh = screen_w, screen_h
