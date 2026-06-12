@@ -239,3 +239,108 @@ Local Run
 bashpip install pygame fastapi psycopg2 groq chromadb sentence-transformers python-dotenv uvicorn
 python main.py        # game
 uvicorn server:app --reload  # backend locally
+Session 2 Updates — DEADZONE
+7. JWT Authentication (menus.py + server.py + game.py + player_name_store.py)
+
+Replaced NameEntryScreen with AuthScreen — three modes: LOGIN, REGISTER, GUEST
+Login/register hits Railway backend in background thread, UI never freezes
+Password shown as asterisks, TAB switches fields, ENTER confirms
+Passwords hashed with bcrypt, stored in PostgreSQL
+JWT tokens issued on success (python-jose, HS256, 30 day expiry)
+Token stored in player_name_store.token for the session
+Score POST now sends Authorization: Bearer <token> header
+Guest players can still play — scores posted without token, user_id = NULL
+player_name_store.py updated: now has name, token, is_guest fields
+
+8. Player Profile Pages (server.py)
+
+GET /player/<name> — full profile page per registered player
+Shows: total runs, best score, avg score, best wave, avg wave, total kills
+Full run history with AI review per run
+Player names on leaderboard are now clickable links to profile
+
+9. Analytics API + Dashboard (server.py)
+
+GET /analytics — dashboard page with 4 sections
+GET /analytics/summary — total runs, unique players, avg/best wave, best score, avg kills
+GET /analytics/wave-distribution — bar chart of which waves players die on
+GET /analytics/accuracy-trend — last 20 runs score trend line chart (canvas)
+GET /analytics/top-players — per-player aggregated stats table, names link to profiles
+Nav links between leaderboard and analytics pages
+
+10. Death Heatmap (game.py + server.py)
+
+On player death, x, y world coordinates + wave number posted to backend
+POST /heatmap/death — stores to heatmap_points table in PostgreSQL
+GET /analytics/heatmap — generates heatmap PNG server-side using matplotlib + scipy
+Custom colormap: dark → red → yellow → white showing death density
+Gaussian blur applied for smooth density visualization
+Returns base64 PNG, rendered in analytics dashboard
+Heatmap section added to /analytics page, shows death count
+
+11. README (README.md) — Complete rewrite
+
+Full architecture diagram (ASCII)
+All systems documented technically
+Complete endpoint table
+Database schema
+File structure with descriptions
+Tech stack table
+Local run instructions
+Controls reference
+Balance tuning table
+
+
+Updated DB schema:
+sqlCREATE TABLE users (
+    id            SERIAL PRIMARY KEY,
+    username      TEXT NOT NULL UNIQUE,
+    password_hash TEXT NOT NULL,
+    created_at    TEXT NOT NULL
+);
+
+CREATE TABLE scores (
+    id        SERIAL PRIMARY KEY,
+    name      TEXT    NOT NULL,
+    score     INTEGER NOT NULL,
+    wave      INTEGER NOT NULL,
+    kills     INTEGER NOT NULL,
+    posted_at TEXT    NOT NULL,
+    ai_review TEXT    DEFAULT '',
+    user_id   INTEGER DEFAULT NULL
+);
+
+CREATE TABLE heatmap_points (
+    id        SERIAL PRIMARY KEY,
+    x         INTEGER NOT NULL,
+    y         INTEGER NOT NULL,
+    wave      INTEGER NOT NULL,
+    world_w   INTEGER NOT NULL DEFAULT 3200,
+    world_h   INTEGER NOT NULL DEFAULT 2400,
+    logged_at TEXT NOT NULL
+);
+Updated environment variables needed:
+GROQ_API_KEY=your_key
+DATABASE_URL=postgresql://...  (Railway auto-sets)
+JWT_SECRET=your-secret-key
+Updated requirements.txt additions:
+bcrypt
+python-jose[cryptography]
+matplotlib
+scipy
+numpy
+New files added this session:
+
+rag_director.py — RAG pipeline, ChromaDB, sentence-transformers
+player_name_store.py — updated with token and is_guest fields
+
+Updated files this session:
+
+game.py — death location capture, heatmap POST, RAG store_run, auth flow
+server.py — auth endpoints, player profiles, analytics, heatmap
+menus.py — AuthScreen replacing NameEntryScreen
+waves.py — RAG context injection into Groq prompt, last_wave_stats property
+collision.py — hit count returned from process()
+hud.py — draw_wave_summary() added
+constants.py — NAME_ENTRY state added
+README.md — complete rewrite

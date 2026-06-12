@@ -14,7 +14,11 @@ ENDPOINTS:
   GET  /analytics/accuracy-trend
   GET  /analytics/top-players
 """
-
+import matplotlib
+matplotlib.use("Agg")
+import matplotlib.pyplot as plt
+import numpy as np
+from scipy.ndimage import gaussian_filter
 import os
 import bcrypt
 import io
