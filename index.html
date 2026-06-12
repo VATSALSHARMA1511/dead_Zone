@@ -1,0 +1,663 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>DEADZONE — Zombie Survival Wave Shooter</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
+<style>
+*,*::before,*::after{margin:0;padding:0;box-sizing:border-box}
+
+:root{
+  --cyan:#00f5d4;
+  --cyan-dim:#00c4aa;
+  --red:#ff3b3b;
+  --bg:#050505;
+  --bg2:#0d0d0d;
+  --bg3:#111;
+  --border:#1a1a1a;
+  --text:#e0e0e0;
+  --muted:#555;
+  --mono:'Share Tech Mono',monospace;
+  --sans:'Inter',sans-serif;
+}
+
+html{scroll-behavior:smooth}
+body{background:var(--bg);color:var(--text);font-family:var(--sans);overflow-x:hidden}
+
+/* ── NOISE CANVAS ── */
+#noise-canvas{position:fixed;inset:0;z-index:0;pointer-events:none;opacity:0.55}
+
+/* ── NAV ── */
+nav{
+  position:fixed;top:0;left:0;right:0;z-index:100;
+  display:flex;align-items:center;justify-content:space-between;
+  padding:1.2rem 3rem;
+  border-bottom:1px solid transparent;
+  transition:border-color 0.3s,background 0.3s;
+  font-family:var(--mono);font-size:13px;
+}
+nav.scrolled{background:rgba(5,5,5,0.92);border-color:var(--border);backdrop-filter:blur(10px)}
+.nav-logo{color:var(--cyan);letter-spacing:0.2em;font-size:15px}
+.nav-links{display:flex;gap:2rem}
+.nav-links a{color:var(--muted);text-decoration:none;letter-spacing:0.1em;transition:color 0.2s}
+.nav-links a:hover{color:var(--cyan)}
+.nav-cta{
+  color:var(--bg);background:var(--cyan);
+  padding:0.4rem 1.1rem;border-radius:2px;
+  text-decoration:none;font-family:var(--mono);font-size:13px;letter-spacing:0.1em;
+  transition:opacity 0.2s;
+}
+.nav-cta:hover{opacity:0.85}
+
+/* ── HERO ── */
+#hero{
+  position:relative;z-index:1;
+  min-height:100vh;
+  display:flex;flex-direction:column;align-items:center;justify-content:center;
+  text-align:center;padding:2rem;
+  overflow:hidden;
+}
+.hero-eyebrow{
+  font-family:var(--mono);font-size:12px;letter-spacing:0.3em;
+  color:var(--cyan);margin-bottom:1.5rem;opacity:0;
+  animation:fadeup 0.8s 0.3s forwards;
+}
+.hero-title{
+  font-family:var(--mono);font-size:clamp(4rem,12vw,9rem);
+  color:var(--cyan);letter-spacing:0.05em;line-height:1;
+  opacity:0;animation:fadeup 0.8s 0.5s forwards;
+  text-shadow:0 0 80px rgba(0,245,212,0.15);
+}
+.hero-sub{
+  font-family:var(--mono);font-size:clamp(0.8rem,1.5vw,1rem);
+  letter-spacing:0.25em;color:var(--muted);margin-top:1.5rem;
+  opacity:0;animation:fadeup 0.8s 0.7s forwards;
+}
+.hero-divider{width:1px;height:60px;background:var(--cyan);opacity:0.3;margin:2.5rem auto;
+  opacity:0;animation:fadeup 0.8s 0.9s forwards;}
+.hero-desc{
+  max-width:520px;font-size:1rem;line-height:1.7;color:#888;
+  opacity:0;animation:fadeup 0.8s 1.1s forwards;
+}
+.hero-btns{
+  display:flex;gap:1rem;margin-top:2.5rem;flex-wrap:wrap;justify-content:center;
+  opacity:0;animation:fadeup 0.8s 1.3s forwards;
+}
+.btn-primary{
+  font-family:var(--mono);font-size:13px;letter-spacing:0.15em;
+  background:var(--cyan);color:var(--bg);padding:0.8rem 2rem;
+  border:none;cursor:pointer;text-decoration:none;display:inline-block;
+  border-radius:2px;transition:opacity 0.2s,transform 0.15s;
+}
+.btn-primary:hover{opacity:0.85;transform:translateY(-1px)}
+.btn-secondary{
+  font-family:var(--mono);font-size:13px;letter-spacing:0.15em;
+  background:transparent;color:var(--cyan);padding:0.8rem 2rem;
+  border:1px solid rgba(0,245,212,0.35);cursor:pointer;text-decoration:none;
+  display:inline-block;border-radius:2px;transition:border-color 0.2s,transform 0.15s;
+}
+.btn-secondary:hover{border-color:var(--cyan);transform:translateY(-1px)}
+.scroll-hint{
+  position:absolute;bottom:2rem;left:50%;transform:translateX(-50%);
+  font-family:var(--mono);font-size:11px;letter-spacing:0.2em;color:var(--muted);
+  display:flex;flex-direction:column;align-items:center;gap:8px;
+  opacity:0;animation:fadeup 0.8s 2s forwards;
+}
+.scroll-hint::after{
+  content:'';width:1px;height:40px;background:linear-gradient(to bottom,var(--muted),transparent);
+  animation:scrollline 1.5s ease-in-out infinite;
+}
+@keyframes scrollline{0%,100%{opacity:0.3}50%{opacity:1}}
+
+/* ── SECTION BASE ── */
+section{position:relative;z-index:1;padding:6rem 3rem}
+.section-label{
+  font-family:var(--mono);font-size:11px;letter-spacing:0.3em;color:var(--cyan);
+  margin-bottom:0.75rem;opacity:0.7;
+}
+.section-title{
+  font-size:clamp(1.8rem,4vw,2.8rem);font-weight:300;letter-spacing:-0.02em;
+  color:#ddd;margin-bottom:1rem;
+}
+.section-title span{color:var(--cyan)}
+.section-body{font-size:1rem;line-height:1.7;color:#666;max-width:560px}
+
+/* ── PROGRESS SCROLL FEATURES ── */
+#features{max-width:1100px;margin:0 auto;padding:8rem 3rem}
+.features-layout{display:grid;grid-template-columns:200px 1fr;gap:0;align-items:start}
+
+.progress-track{
+  position:sticky;top:40vh;
+  display:flex;flex-direction:column;align-items:flex-end;
+  padding-right:2.5rem;gap:0;
+}
+.progress-line{
+  width:1px;height:320px;background:var(--border);
+  position:relative;margin:0 auto;margin-right:0;
+}
+.progress-fill{
+  position:absolute;top:0;left:0;width:100%;
+  background:var(--cyan);transition:height 0.1s linear;
+}
+.progress-dots{
+  position:absolute;top:0;left:50%;transform:translateX(-50%);
+  display:flex;flex-direction:column;justify-content:space-between;
+  height:100%;
+}
+.pdot{
+  width:7px;height:7px;border-radius:50%;
+  border:1px solid var(--muted);background:var(--bg);
+  transform:translateX(-50%);transition:border-color 0.3s,background 0.3s;
+  position:relative;
+}
+.pdot.active{border-color:var(--cyan);background:var(--cyan)}
+.pdot-label{
+  position:absolute;right:calc(100% + 14px);top:50%;transform:translateY(-50%);
+  font-family:var(--mono);font-size:11px;letter-spacing:0.15em;white-space:nowrap;
+  color:var(--muted);transition:color 0.3s;
+}
+.pdot.active .pdot-label{color:var(--cyan)}
+
+.features-content{display:flex;flex-direction:column;gap:0}
+.feature-block{
+  min-height:70vh;display:flex;align-items:center;
+  padding:4rem 0;opacity:0.25;transition:opacity 0.5s;
+}
+.feature-block.visible{opacity:1}
+.feature-inner{max-width:580px}
+.feature-number{
+  font-family:var(--mono);font-size:11px;letter-spacing:0.3em;
+  color:var(--cyan);opacity:0.5;margin-bottom:1rem;
+}
+.feature-title{
+  font-size:clamp(1.5rem,3vw,2.2rem);font-weight:300;
+  color:#ddd;margin-bottom:1rem;letter-spacing:-0.01em;
+}
+.feature-desc{font-size:0.95rem;line-height:1.75;color:#666;margin-bottom:1.5rem}
+.feature-tags{display:flex;flex-wrap:wrap;gap:8px}
+.tag{
+  font-family:var(--mono);font-size:11px;letter-spacing:0.1em;
+  padding:4px 10px;border:1px solid var(--border);color:var(--muted);border-radius:2px;
+}
+
+/* ── STATS STRIP ── */
+#stats{
+  border-top:1px solid var(--border);border-bottom:1px solid var(--border);
+  background:var(--bg2);
+}
+.stats-inner{
+  max-width:900px;margin:0 auto;padding:4rem 3rem;
+  display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:3rem;
+  text-align:center;
+}
+.stat-val{
+  font-family:var(--mono);font-size:2.5rem;color:var(--cyan);display:block;margin-bottom:0.4rem;
+}
+.stat-lbl{font-family:var(--mono);font-size:11px;letter-spacing:0.25em;color:var(--muted)}
+
+/* ── LEADERBOARD ── */
+#leaderboard{background:var(--bg2);border-top:1px solid var(--border)}
+.lb-inner{max-width:800px;margin:0 auto}
+.lb-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:2rem}
+.lb-live{
+  font-family:var(--mono);font-size:11px;letter-spacing:0.15em;
+  color:var(--cyan);display:flex;align-items:center;gap:8px;
+}
+.lb-dot{width:6px;height:6px;border-radius:50%;background:var(--cyan);animation:pulse 1.5s infinite}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:0.3}}
+table{width:100%;border-collapse:collapse;font-family:var(--mono);font-size:13px}
+th{
+  text-align:left;padding:0.6rem 1rem;
+  font-size:11px;letter-spacing:0.2em;color:var(--muted);
+  border-bottom:1px solid var(--border);font-weight:400;
+}
+td{padding:0.8rem 1rem;border-bottom:1px solid var(--border);color:#aaa;vertical-align:top}
+tr:hover td{background:rgba(0,245,212,0.03)}
+.rank-1{color:var(--cyan)}
+.rank-2{color:#888}
+.rank-3{color:#666}
+.ai-review{
+  font-size:11px;color:#444;font-style:italic;margin-top:4px;
+  max-width:300px;display:block;line-height:1.5;
+}
+.score-val{color:var(--cyan)}
+.lb-link{
+  display:block;text-align:center;margin-top:1.5rem;
+  font-family:var(--mono);font-size:12px;letter-spacing:0.15em;
+  color:var(--muted);text-decoration:none;transition:color 0.2s;
+}
+.lb-link:hover{color:var(--cyan)}
+
+/* ── ANALYTICS ── */
+#analytics-section{border-top:1px solid var(--border)}
+.analytics-inner{max-width:900px;margin:0 auto;display:grid;grid-template-columns:1fr 1fr;gap:3rem;align-items:center}
+.analytics-cards{display:grid;grid-template-columns:1fr 1fr;gap:1rem}
+.acard{
+  background:var(--bg3);border:1px solid var(--border);
+  padding:1.2rem;border-radius:3px;
+}
+.acard-label{font-family:var(--mono);font-size:10px;letter-spacing:0.2em;color:var(--muted);margin-bottom:0.5rem}
+.acard-val{font-family:var(--mono);font-size:1.5rem;color:var(--cyan)}
+.acard-sub{font-size:11px;color:#444;margin-top:4px;font-family:var(--mono)}
+
+/* ── GITHUB CTA ── */
+#download{border-top:1px solid var(--border);text-align:center}
+.download-inner{max-width:600px;margin:0 auto}
+.download-title{font-size:clamp(2rem,5vw,3.5rem);font-weight:300;color:#ddd;letter-spacing:-0.02em;margin-bottom:1rem}
+.download-sub{font-size:0.95rem;color:#555;line-height:1.7;margin-bottom:2.5rem}
+.download-steps{
+  display:flex;gap:1rem;margin-bottom:3rem;flex-wrap:wrap;justify-content:center;
+}
+.step{
+  font-family:var(--mono);font-size:11px;letter-spacing:0.1em;
+  color:var(--muted);background:var(--bg3);border:1px solid var(--border);
+  padding:0.5rem 1rem;border-radius:2px;
+}
+
+/* ── FOOTER ── */
+footer{
+  border-top:1px solid var(--border);padding:2rem 3rem;
+  display:flex;justify-content:space-between;align-items:center;
+  font-family:var(--mono);font-size:11px;letter-spacing:0.1em;color:var(--muted);
+  position:relative;z-index:1;
+}
+footer a{color:var(--muted);text-decoration:none;transition:color 0.2s}
+footer a:hover{color:var(--cyan)}
+
+/* ── ANIMATIONS ── */
+@keyframes fadeup{
+  from{opacity:0;transform:translateY(20px)}
+  to{opacity:1;transform:translateY(0)}
+}
+.reveal{opacity:0;transform:translateY(30px);transition:opacity 0.7s,transform 0.7s}
+.reveal.visible{opacity:1;transform:none}
+
+@media(max-width:768px){
+  nav{padding:1rem 1.5rem}
+  .nav-links{display:none}
+  section,#features{padding:5rem 1.5rem}
+  .features-layout{grid-template-columns:1fr}
+  .progress-track{display:none}
+  .analytics-inner{grid-template-columns:1fr}
+  footer{flex-direction:column;gap:1rem;text-align:center}
+}
+</style>
+</head>
+<body>
+
+<canvas id="noise-canvas"></canvas>
+
+<!-- NAV -->
+<nav id="nav">
+  <span class="nav-logo">DEADZONE</span>
+  <div class="nav-links">
+    <a href="#features">SYSTEMS</a>
+    <a href="#leaderboard">LEADERBOARD</a>
+    <a href="#analytics-section">ANALYTICS</a>
+    <a href="#download">DOWNLOAD</a>
+  </div>
+  <a href="https://github.com/VATSALSHARMA1511/dead_Zone" target="_blank" class="nav-cta">GITHUB ↗</a>
+</nav>
+
+<!-- HERO -->
+<section id="hero">
+  <p class="hero-eyebrow">PYTHON · PYGAME · FASTAPI · GROQ AI · RAG</p>
+  <h1 class="hero-title">DEADZONE</h1>
+  <p class="hero-sub">ZOMBIE SURVIVAL &nbsp;·&nbsp; WAVE SHOOTER &nbsp;·&nbsp; AI DIRECTOR</p>
+  <div class="hero-divider"></div>
+  <p class="hero-desc">
+    A top-down neon tactical shooter where an AI wave director studies your playstyle and adapts every wave to counter you. Built with production-grade systems: RAG memory, real-time analytics, JWT auth, and a deployed backend.
+  </p>
+  <div class="hero-btns">
+    <a href="#download" class="btn-primary">DOWNLOAD & PLAY</a>
+    <a href="#features" class="btn-secondary">HOW IT WORKS</a>
+  </div>
+  <div class="scroll-hint">SCROLL</div>
+</section>
+
+<!-- STATS STRIP -->
+<div id="stats">
+  <div class="stats-inner">
+    <div>
+      <span class="stat-val" id="stat-runs">—</span>
+      <span class="stat-lbl">TOTAL RUNS</span>
+    </div>
+    <div>
+      <span class="stat-val" id="stat-players">—</span>
+      <span class="stat-lbl">UNIQUE PLAYERS</span>
+    </div>
+    <div>
+      <span class="stat-val" id="stat-wave">—</span>
+      <span class="stat-lbl">BEST WAVE</span>
+    </div>
+    <div>
+      <span class="stat-val" id="stat-score">—</span>
+      <span class="stat-lbl">HIGH SCORE</span>
+    </div>
+  </div>
+</div>
+
+<!-- FEATURES -->
+<div id="features">
+  <div style="margin-bottom:5rem" class="reveal">
+    <p class="section-label">SYSTEMS</p>
+    <h2 class="section-title">Built like a <span>real product</span></h2>
+    <p class="section-body">Every system was built with production architecture in mind — not just a game jam prototype.</p>
+  </div>
+
+  <div class="features-layout">
+    <div class="progress-track">
+      <div class="progress-line">
+        <div class="progress-fill" id="progress-fill"></div>
+        <div class="progress-dots" id="progress-dots"></div>
+      </div>
+    </div>
+
+    <div class="features-content" id="features-content">
+
+      <div class="feature-block" data-index="0">
+        <div class="feature-inner">
+          <p class="feature-number">01 / 05</p>
+          <h3 class="feature-title">AI Wave Director</h3>
+          <p class="feature-desc">After every wave, Groq's LLaMA 3.3 70B analyses your kill rate, accuracy, and damage taken — then crafts the next wave composition to specifically counter your weaknesses. Boss waves every 5 are hardcoded; the AI commands everything in between.</p>
+          <div class="feature-tags">
+            <span class="tag">GROQ API</span>
+            <span class="tag">LLAMA-3.3-70B</span>
+            <span class="tag">BACKGROUND THREAD</span>
+            <span class="tag">VALIDATED OUTPUT</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="feature-block" data-index="1">
+        <div class="feature-inner">
+          <p class="feature-number">02 / 05</p>
+          <h3 class="feature-title">RAG Persistent Memory</h3>
+          <p class="feature-desc">Each completed run is converted to natural language, embedded via sentence-transformers, and stored in ChromaDB. Before each wave request, the top 3 most similar past runs are retrieved and injected into the prompt — the AI genuinely remembers how you play.</p>
+          <div class="feature-tags">
+            <span class="tag">CHROMADB</span>
+            <span class="tag">SENTENCE-TRANSFORMERS</span>
+            <span class="tag">VECTOR SEARCH</span>
+            <span class="tag">CROSS-SESSION</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="feature-block" data-index="2">
+        <div class="feature-inner">
+          <p class="feature-number">03 / 05</p>
+          <h3 class="feature-title">Deployed Backend & Auth</h3>
+          <p class="feature-desc">FastAPI server on Railway with PostgreSQL. Full JWT authentication — register, login, or play as guest. Scores, AI reviews, and player stats all persist to the cloud. Player profile pages show complete run histories.</p>
+          <div class="feature-tags">
+            <span class="tag">FASTAPI</span>
+            <span class="tag">POSTGRESQL</span>
+            <span class="tag">JWT / BCRYPT</span>
+            <span class="tag">RAILWAY</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="feature-block" data-index="3">
+        <div class="feature-inner">
+          <p class="feature-number">04 / 05</p>
+          <h3 class="feature-title">Death Heatmap & Analytics</h3>
+          <p class="feature-desc">Every death position is logged to the backend. A server-side matplotlib pipeline applies Gaussian blur over all death coordinates and returns a heatmap image — so you can see exactly where the map kills players the most.</p>
+          <div class="feature-tags">
+            <span class="tag">MATPLOTLIB</span>
+            <span class="tag">SCIPY GAUSSIAN</span>
+            <span class="tag">WAVE DISTRIBUTION</span>
+            <span class="tag">SCORE TRENDS</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="feature-block" data-index="4">
+        <div class="feature-inner">
+          <p class="feature-number">05 / 05</p>
+          <h3 class="feature-title">Tactical Game Systems</h3>
+          <p class="feature-desc">3 weapons, 4 zombie types, procedural sector world, stamina system, dash with iframes, HP-based movement penalties, streak multipliers, custom sprite uploads, screen shake, muzzle flash, blood particles. Everything in a centralised collision system with no circular imports.</p>
+          <div class="feature-tags">
+            <span class="tag">PYGAME</span>
+            <span class="tag">PROCEDURAL WORLD</span>
+            <span class="tag">4 ZOMBIE TYPES</span>
+            <span class="tag">PARTICLE SYSTEM</span>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<!-- LEADERBOARD -->
+<section id="leaderboard">
+  <div class="lb-inner">
+    <div class="lb-header reveal">
+      <div>
+        <p class="section-label">GLOBAL</p>
+        <h2 class="section-title" style="margin-bottom:0">Top Players</h2>
+      </div>
+      <div class="lb-live"><span class="lb-dot"></span>LIVE</div>
+    </div>
+    <div id="lb-table" class="reveal">
+      <table>
+        <thead>
+          <tr>
+            <th>#</th>
+            <th>PLAYER</th>
+            <th>SCORE</th>
+            <th>WAVE</th>
+            <th>KILLS</th>
+            <th>ANALYSIS</th>
+          </tr>
+        </thead>
+        <tbody id="lb-body">
+          <tr><td colspan="6" style="text-align:center;color:var(--muted);padding:2rem;font-family:var(--mono);font-size:12px">LOADING...</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <a href="/leaderboard" class="lb-link reveal">VIEW FULL LEADERBOARD →</a>
+  </div>
+</section>
+
+<!-- ANALYTICS -->
+<section id="analytics-section">
+  <div class="analytics-inner">
+    <div class="reveal">
+      <p class="section-label">INTELLIGENCE</p>
+      <h2 class="section-title">Analytics <span>Dashboard</span></h2>
+      <p class="section-body" style="margin-bottom:1.5rem">
+        Real-time data on every run ever played. Wave death distribution, score trends, per-player aggregated stats, and a death heatmap generated server-side.
+      </p>
+      <a href="/analytics" class="btn-secondary" style="display:inline-block">OPEN DASHBOARD →</a>
+    </div>
+    <div class="analytics-cards reveal" id="analytics-cards">
+      <div class="acard">
+        <div class="acard-label">TOTAL RUNS</div>
+        <div class="acard-val" id="ac-runs">—</div>
+      </div>
+      <div class="acard">
+        <div class="acard-label">UNIQUE PLAYERS</div>
+        <div class="acard-val" id="ac-players">—</div>
+      </div>
+      <div class="acard">
+        <div class="acard-label">AVG WAVE REACHED</div>
+        <div class="acard-val" id="ac-avgwave">—</div>
+      </div>
+      <div class="acard">
+        <div class="acard-label">BEST SCORE EVER</div>
+        <div class="acard-val" id="ac-bestscore">—</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- DOWNLOAD -->
+<section id="download">
+  <div class="download-inner reveal">
+    <p class="section-label">GET THE GAME</p>
+    <h2 class="download-title">Play it yourself</h2>
+    <p class="download-sub">Clone the repo, install dependencies, and run locally. Your scores sync to the global leaderboard automatically.</p>
+    <div class="download-steps">
+      <span class="step">1. git clone</span>
+      <span class="step">2. pip install -r requirements.txt</span>
+      <span class="step">3. python main.py</span>
+    </div>
+    <a href="https://github.com/VATSALSHARMA1511/dead_Zone" target="_blank" class="btn-primary" style="font-size:14px;padding:1rem 2.5rem;letter-spacing:0.15em">
+      VIEW ON GITHUB ↗
+    </a>
+  </div>
+</section>
+
+<!-- FOOTER -->
+<footer>
+  <span>DEADZONE &copy; 2025 VATSAL SHARMA</span>
+  <div style="display:flex;gap:2rem">
+    <a href="/leaderboard">LEADERBOARD</a>
+    <a href="/analytics">ANALYTICS</a>
+    <a href="https://github.com/VATSALSHARMA1511/dead_Zone" target="_blank">GITHUB</a>
+  </div>
+</footer>
+
+<script>
+// ── NOISE BACKGROUND ──
+(function(){
+  const canvas=document.getElementById('noise-canvas');
+  const ctx=canvas.getContext('2d');
+  let w,h,animId;
+  let t=0;
+
+  function resize(){
+    w=canvas.width=window.innerWidth;
+    h=canvas.height=window.innerHeight;
+  }
+  resize();
+  window.addEventListener('resize',resize);
+
+  // Orbs
+  const orbs=[
+    {x:0.2,y:0.3,r:0.35,color:'rgba(0,245,212,0.06)'},
+    {x:0.8,y:0.7,r:0.3,color:'rgba(0,245,212,0.04)'},
+    {x:0.5,y:0.5,r:0.25,color:'rgba(255,59,59,0.03)'},
+  ];
+
+  function drawFrame(){
+    ctx.clearRect(0,0,w,h);
+    t+=0.003;
+
+    // Draw blobs
+    orbs.forEach((o,i)=>{
+      const ox=w*(o.x+Math.sin(t+i)*0.08);
+      const oy=h*(o.y+Math.cos(t*0.7+i)*0.06);
+      const r=Math.min(w,h)*o.r;
+      const g=ctx.createRadialGradient(ox,oy,0,ox,oy,r);
+      g.addColorStop(0,o.color);
+      g.addColorStop(1,'transparent');
+      ctx.fillStyle=g;
+      ctx.fillRect(0,0,w,h);
+    });
+
+    // Noise overlay
+    const id=ctx.getImageData(0,0,w,h);
+    const d=id.data;
+    for(let i=0;i<d.length;i+=16){
+      const n=(Math.random()-0.5)*18;
+      d[i]  =Math.max(0,Math.min(255,d[i]+n));
+      d[i+1]=Math.max(0,Math.min(255,d[i+1]+n));
+      d[i+2]=Math.max(0,Math.min(255,d[i+2]+n));
+    }
+    ctx.putImageData(id,0,0);
+
+    animId=requestAnimationFrame(drawFrame);
+  }
+  drawFrame();
+})();
+
+// ── NAV SCROLL ──
+window.addEventListener('scroll',()=>{
+  document.getElementById('nav').classList.toggle('scrolled',window.scrollY>40);
+});
+
+// ── REVEAL ON SCROLL ──
+const reveals=document.querySelectorAll('.reveal');
+const ro=new IntersectionObserver(entries=>{
+  entries.forEach(e=>{if(e.isIntersecting)e.target.classList.add('visible')});
+},{threshold:0.15});
+reveals.forEach(r=>ro.observe(r));
+
+// ── FEATURES SCROLL PROGRESS ──
+const featureBlocks=document.querySelectorAll('.feature-block');
+const labels=['AI DIRECTOR','RAG MEMORY','BACKEND','HEATMAP','GAMEPLAY'];
+const dotsContainer=document.getElementById('progress-dots');
+const progressFill=document.getElementById('progress-fill');
+
+// Build dots
+labels.forEach((lbl,i)=>{
+  const dot=document.createElement('div');
+  dot.className='pdot';
+  dot.innerHTML=`<span class="pdot-label">${lbl}</span>`;
+  dotsContainer.appendChild(dot);
+});
+const dots=dotsContainer.querySelectorAll('.pdot');
+
+const fbo=new IntersectionObserver(entries=>{
+  entries.forEach(e=>{
+    const idx=parseInt(e.target.dataset.index);
+    if(e.isIntersecting){
+      e.target.classList.add('visible');
+      dots.forEach((d,i)=>d.classList.toggle('active',i<=idx));
+      progressFill.style.height=((idx+1)/featureBlocks.length*100)+'%';
+    }
+  });
+},{threshold:0.4,rootMargin:'-20% 0px -20% 0px'});
+featureBlocks.forEach(b=>fbo.observe(b));
+
+// ── FETCH LEADERBOARD ──
+async function loadLeaderboard(){
+  try{
+    const r=await fetch('/scores');
+    const data=await r.json();
+    const tbody=document.getElementById('lb-body');
+    if(!data.length){
+      tbody.innerHTML='<tr><td colspan="6" style="text-align:center;color:var(--muted);padding:2rem;font-family:var(--mono);font-size:12px">NO RUNS YET</td></tr>';
+      return;
+    }
+    const rankClass=['rank-1','rank-2','rank-3'];
+    tbody.innerHTML=data.slice(0,8).map((row,i)=>`
+      <tr>
+        <td class="${rankClass[i]||''}">${i===0?'◆':i===1?'◇':'·'} ${i+1}</td>
+        <td><a href="/player/${row.name}" style="color:inherit;text-decoration:none;transition:color 0.2s" onmouseover="this.style.color='var(--cyan)'" onmouseout="this.style.color=''">${row.name}</a></td>
+        <td class="score-val">${row.score.toLocaleString()}</td>
+        <td>${row.wave}</td>
+        <td>${row.kills}</td>
+        <td>${row.ai_review?`<span class="ai-review">${row.ai_review.slice(0,80)}${row.ai_review.length>80?'…':''}</span>`:'<span style="color:#333;font-size:11px">—</span>'}</td>
+      </tr>
+    `).join('');
+  }catch(e){
+    document.getElementById('lb-body').innerHTML='<tr><td colspan="6" style="text-align:center;color:var(--muted);font-family:var(--mono);font-size:12px;padding:2rem">BACKEND OFFLINE</td></tr>';
+  }
+}
+loadLeaderboard();
+setInterval(loadLeaderboard,15000);
+
+// ── FETCH ANALYTICS SUMMARY ──
+async function loadAnalytics(){
+  try{
+    const r=await fetch('/analytics/summary');
+    const d=await r.json();
+    document.getElementById('stat-runs').textContent=d.total_runs??'—';
+    document.getElementById('stat-players').textContent=d.unique_players??'—';
+    document.getElementById('stat-wave').textContent=d.best_wave??'—';
+    document.getElementById('stat-score').textContent=d.best_score?.toLocaleString()??'—';
+    document.getElementById('ac-runs').textContent=d.total_runs??'—';
+    document.getElementById('ac-players').textContent=d.unique_players??'—';
+    document.getElementById('ac-avgwave').textContent=d.avg_wave??'—';
+    document.getElementById('ac-bestscore').textContent=d.best_score?.toLocaleString()??'—';
+  }catch(e){}
+}
+loadAnalytics();
+</script>
+</body>
+</html>

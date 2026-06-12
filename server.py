@@ -639,8 +639,11 @@ def analytics_page():
 
 
 # ── Leaderboard page ──────────────────────────────────────────────────────────
-
 @app.get("/", response_class=HTMLResponse)
+def homepage():
+    with open("index.html", "r", encoding="utf-8") as f:
+        return f.read()
+@app.get("/leaderboard", response_class=HTMLResponse)
 def leaderboard_page():
     return """<!DOCTYPE html>
 <html>
@@ -682,7 +685,7 @@ def leaderboard_page():
 <body>
   <h1>DEADZONE</h1>
   <div class="subtitle">ZOMBIE SURVIVAL &nbsp;•&nbsp; LEADERBOARD</div>
-  <div class="nav"><a href="/" class="active">LEADERBOARD</a><a href="/analytics">ANALYTICS</a></div>
+  <div class="nav"><a href="/leaderboard" class="active">LEADERBOARD</a><a href="/analytics">ANALYTICS</a></div>
   <table>
     <thead><tr><th>#</th><th>NAME</th><th>SCORE</th><th>WAVE</th><th>KILLS</th><th>DATE</th></tr></thead>
     <tbody id="rows"><tr><td colspan="6" class="empty">Loading...</td></tr></tbody>
