@@ -366,6 +366,7 @@ class Game:
     # ── Main update ──────────────────────────────────────────────────────────
 
     def update(self, dt: float, events: list) -> None:
+        pygame.mouse.set_visible(self.state != GameState.PLAYING)
         if self.state == GameState.MAIN_MENU:
             self._update_main_menu(dt, events)
         elif self.state == GameState.NAME_ENTRY:
