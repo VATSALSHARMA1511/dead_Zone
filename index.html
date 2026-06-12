@@ -232,15 +232,23 @@ tr:hover td{background:rgba(0,245,212,0.03)}
 
 /* ── ANALYTICS ── */
 #analytics-section{border-top:1px solid var(--border)}
-.analytics-inner{max-width:900px;margin:0 auto;display:grid;grid-template-columns:1fr 1fr;gap:3rem;align-items:center}
-.analytics-cards{display:grid;grid-template-columns:1fr 1fr;gap:1rem}
-.acard{
-  background:var(--bg3);border:1px solid var(--border);
-  padding:1.2rem;border-radius:3px;
-}
+.analytics-cards{display:grid;grid-template-columns:repeat(4,1fr);gap:1rem}
+.acard{background:var(--bg3);border:1px solid var(--border);padding:1.2rem;border-radius:3px}
 .acard-label{font-family:var(--mono);font-size:10px;letter-spacing:0.2em;color:var(--muted);margin-bottom:0.5rem}
 .acard-val{font-family:var(--mono);font-size:1.5rem;color:var(--cyan)}
-.acard-sub{font-size:11px;color:#444;margin-top:4px;font-family:var(--mono)}
+
+/* wave bars */
+.wbar-row{display:flex;align-items:center;gap:1rem}
+.wbar-label{font-family:var(--mono);font-size:11px;letter-spacing:0.1em;color:var(--muted);width:30px;flex-shrink:0}
+.wbar-track{flex:1;height:2px;background:var(--border);position:relative;border-radius:1px}
+.wbar-fill{height:100%;border-radius:1px;transition:width 1s cubic-bezier(0.16,1,0.3,1)}
+.wbar-count{font-family:var(--mono);font-size:11px;color:var(--muted);width:24px;text-align:right;flex-shrink:0}
+
+/* heatmap */
+#home-heatmap img{width:100%;border-radius:3px;border:1px solid var(--border);display:block}
+.heatmap-meta{font-family:var(--mono);font-size:11px;letter-spacing:0.2em;color:var(--muted);margin-top:8px;text-align:right}
+
+@media(max-width:768px){.analytics-cards{grid-template-columns:1fr 1fr}}
 
 /* ── GITHUB CTA ── */
 #download{border-top:1px solid var(--border);text-align:center}
@@ -464,16 +472,16 @@ footer a:hover{color:var(--cyan)}
 
 <!-- ANALYTICS -->
 <section id="analytics-section">
-  <div class="analytics-inner">
-    <div class="reveal">
+  <div style="max-width:1000px;margin:0 auto">
+
+    <div class="reveal" style="margin-bottom:3rem">
       <p class="section-label">INTELLIGENCE</p>
       <h2 class="section-title">Analytics <span>Dashboard</span></h2>
-      <p class="section-body" style="margin-bottom:1.5rem">
-        Real-time data on every run ever played. Wave death distribution, score trends, per-player aggregated stats, and a death heatmap generated server-side.
-      </p>
-      <a href="/analytics" class="btn-secondary" style="display:inline-block">OPEN DASHBOARD →</a>
+      <p class="section-body">Real-time data on every run ever played — wave deaths, score trends, and a server-side death heatmap.</p>
     </div>
-    <div class="analytics-cards reveal" id="analytics-cards">
+
+    <!-- stat cards -->
+    <div class="analytics-cards reveal" id="analytics-cards" style="margin-bottom:4rem">
       <div class="acard">
         <div class="acard-label">TOTAL RUNS</div>
         <div class="acard-val" id="ac-runs">—</div>
@@ -491,6 +499,25 @@ footer a:hover{color:var(--cyan)}
         <div class="acard-val" id="ac-bestscore">—</div>
       </div>
     </div>
+
+    <!-- wave distribution -->
+    <div class="reveal" style="margin-bottom:4rem">
+      <p class="section-label" style="margin-bottom:1.5rem">WAVE DISTRIBUTION — WHERE PLAYERS DIE</p>
+      <div id="home-wave-bars" style="display:flex;flex-direction:column;gap:10px"></div>
+    </div>
+
+    <!-- heatmap -->
+    <div class="reveal" style="margin-bottom:3rem">
+      <p class="section-label" style="margin-bottom:1.5rem">DEATH HEATMAP</p>
+      <div id="home-heatmap" style="min-height:80px;display:flex;align-items:center;justify-content:center">
+        <span style="font-family:var(--mono);font-size:12px;letter-spacing:0.2em;color:var(--muted)">LOADING...</span>
+      </div>
+    </div>
+
+    <div class="reveal" style="text-align:center">
+      <a href="/analytics" class="btn-secondary" style="display:inline-block">FULL DASHBOARD →</a>
+    </div>
+
   </div>
 </section>
 
@@ -658,6 +685,53 @@ async function loadAnalytics(){
   }catch(e){}
 }
 loadAnalytics();
+
+// ── WAVE DISTRIBUTION ──
+async function loadWaveDist(){
+  try{
+    const data=await fetch('/analytics/wave-distribution').then(r=>r.json());
+    const container=document.getElementById('home-wave-bars');
+    if(!data.length){container.innerHTML='<span style="font-family:var(--mono);font-size:12px;color:var(--muted);letter-spacing:0.2em">NO DATA YET</span>';return;}
+    const max=Math.max(...data.map(d=>d.runs));
+    // cyan to red gradient across waves
+    const colors=['#00f5d4','#00d4a8','#00b07a','#f5a623','#f57623','#ff3b3b'];
+    container.innerHTML=data.map((d,i)=>`
+      <div class="wbar-row">
+        <span class="wbar-label">W${d.wave}</span>
+        <div class="wbar-track">
+          <div class="wbar-fill" style="width:0%;background:${colors[Math.min(i,colors.length-1)]}" data-pct="${(d.runs/max*100).toFixed(1)}"></div>
+        </div>
+        <span class="wbar-count">${d.runs}</span>
+      </div>`).join('');
+    // animate bars in after a tick
+    setTimeout(()=>{
+      container.querySelectorAll('.wbar-fill').forEach(el=>{
+        el.style.width=el.dataset.pct+'%';
+      });
+    },200);
+  }catch(e){}
+}
+loadWaveDist();
+
+// ── DEATH HEATMAP ──
+async function loadHeatmap(){
+  const container=document.getElementById('home-heatmap');
+  try{
+    const d=await fetch('/analytics/heatmap').then(r=>r.json());
+    if(!d.image){
+      container.innerHTML='<span style="font-family:var(--mono);font-size:12px;letter-spacing:0.2em;color:var(--muted)">NO DEATH DATA YET — PLAY THE GAME</span>';
+      return;
+    }
+    container.innerHTML=`
+      <div style="width:100%">
+        <img src="data:image/png;base64,${d.image}" alt="Death Heatmap"/>
+        <div class="heatmap-meta">${d.count} DEATH${d.count!==1?'S':''} RECORDED</div>
+      </div>`;
+  }catch(e){
+    container.innerHTML='<span style="font-family:var(--mono);font-size:12px;letter-spacing:0.2em;color:var(--muted)">HEATMAP UNAVAILABLE</span>';
+  }
+}
+loadHeatmap();
 </script>
 </body>
 </html>
