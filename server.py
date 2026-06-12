@@ -17,6 +17,8 @@ ENDPOINTS:
 
 import os
 import bcrypt
+import io
+import base64
 from datetime import datetime, timedelta
 from typing import Optional
 import psycopg2
@@ -79,6 +81,17 @@ def init_db():
         )
     """)
 
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS heatmap_points (
+            id       SERIAL PRIMARY KEY,
+            x        INTEGER NOT NULL,
+            y        INTEGER NOT NULL,
+            wave     INTEGER NOT NULL,
+            world_w  INTEGER NOT NULL DEFAULT 3200,
+            world_h  INTEGER NOT NULL DEFAULT 2400,
+            logged_at TEXT NOT NULL
+        )
+    """)
     conn.commit()
     cur.close()
     conn.close()
@@ -312,6 +325,114 @@ def player_profile(username: str):
 </html>"""
 
 
+# ── Heatmap routes ───────────────────────────────────────────────────────────
+
+class DeathPoint(BaseModel):
+    x:       int
+    y:       int
+    wave:    int
+    world_w: int = 3200
+    world_h: int = 2400
+
+
+@app.post("/heatmap/death")
+def log_death(data: DeathPoint):
+    conn = get_db()
+    cur  = conn.cursor()
+    cur.execute(
+        "INSERT INTO heatmap_points (x, y, wave, world_w, world_h, logged_at) VALUES (%s,%s,%s,%s,%s,%s)",
+        (data.x, data.y, data.wave, data.world_w, data.world_h,
+         datetime.now().strftime("%Y-%m-%d %H:%M"))
+    )
+    conn.commit()
+    cur.close()
+    conn.close()
+    return {"status": "ok"}
+
+
+@app.get("/analytics/heatmap")
+def get_heatmap():
+    """Generate and return a heatmap PNG as base64."""
+    conn = get_db()
+    cur  = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+    cur.execute("SELECT x, y, wave FROM heatmap_points ORDER BY id DESC LIMIT 500")
+    rows = [dict(r) for r in cur.fetchall()]
+    cur.close()
+    conn.close()
+
+    if not rows:
+        return {"image": None, "count": 0}
+
+    try:
+        import matplotlib
+        matplotlib.use("Agg")
+        import matplotlib.pyplot as plt
+        import matplotlib.colors as mcolors
+        import numpy as np
+
+        WORLD_W, WORLD_H = 3200, 2400
+
+        xs = [r["x"] for r in rows]
+        ys = [r["y"] for r in rows]
+
+        fig, ax = plt.subplots(figsize=(10, 7.5))
+        fig.patch.set_facecolor("#0a0c12")
+        ax.set_facecolor("#0a0c12")
+
+        # 2D histogram heatmap
+        h, xedges, yedges = np.histogram2d(xs, ys,
+                                            bins=40,
+                                            range=[[0, WORLD_W], [0, WORLD_H]])
+
+        # Smooth with gaussian blur
+        from scipy.ndimage import gaussian_filter
+        h = gaussian_filter(h, sigma=1.5)
+
+        # Custom colormap: dark → red → yellow → white
+        colors_list = ["#0a0c12", "#1a0505", "#ff0000", "#ff8800", "#ffff00", "#ffffff"]
+        cmap = mcolors.LinearSegmentedColormap.from_list("deadzone", colors_list)
+
+        im = ax.imshow(
+            h.T,
+            origin="lower",
+            extent=[0, WORLD_W, 0, WORLD_H],
+            cmap=cmap,
+            aspect="auto",
+            alpha=0.9,
+            interpolation="bilinear",
+        )
+
+        # Death location dots
+        ax.scatter(xs, ys, c="#ff3246", s=8, alpha=0.4, zorder=5)
+
+        # Colorbar
+        cbar = plt.colorbar(im, ax=ax)
+        cbar.ax.yaxis.set_tick_params(color="white")
+        plt.setp(cbar.ax.yaxis.get_ticklabels(), color="white")
+        cbar.set_label("Death Density", color="white", fontsize=10)
+
+        ax.set_title(f"DEADZONE — Death Heatmap ({len(rows)} runs)",
+                     color="#00dcb4", fontsize=14, fontfamily="monospace", pad=12)
+        ax.set_xlabel("World X", color="#4a5570", fontsize=9)
+        ax.set_ylabel("World Y", color="#4a5570", fontsize=9)
+        ax.tick_params(colors="#4a5570")
+        for spine in ax.spines.values():
+            spine.set_edgecolor("#1e2438")
+
+        plt.tight_layout()
+
+        buf = io.BytesIO()
+        plt.savefig(buf, format="png", dpi=120, facecolor="#0a0c12")
+        plt.close(fig)
+        buf.seek(0)
+        img_b64 = base64.b64encode(buf.read()).decode()
+
+        return {"image": img_b64, "count": len(rows)}
+
+    except ImportError as e:
+        return {"error": f"Missing dependency: {e}", "count": len(rows)}
+
+
 # ── Analytics routes ──────────────────────────────────────────────────────────
 
 @app.get("/analytics/summary")
@@ -422,6 +543,12 @@ def analytics_page():
   <div class="section"><h2>WAVE DISTRIBUTION — WHERE PLAYERS DIE</h2><div class="bar-chart" id="wave-bars"></div></div>
   <div class="section"><h2>SCORE TREND — LAST 20 RUNS</h2><canvas id="trend-canvas" height="200"></canvas></div>
   <div class="section">
+    <h2>DEATH HEATMAP</h2>
+    <div id="heatmap-container" style="text-align:center;min-height:120px;display:flex;align-items:center;justify-content:center;">
+      <span style="color:#2a3048;letter-spacing:2px;font-size:13px;">LOADING HEATMAP...</span>
+    </div>
+  </div>
+  <div class="section">
     <h2>PLAYER STATS</h2>
     <table><thead><tr><th>#</th><th>NAME</th><th>BEST SCORE</th><th>AVG SCORE</th><th>BEST WAVE</th><th>AVG WAVE</th><th>TOTAL KILLS</th><th>RUNS</th></tr></thead>
     <tbody id="players-tbody"></tbody></table>
@@ -480,7 +607,28 @@ def analytics_page():
         <td class="pgray">${p.total_runs}</td>
       </tr>`).join('');
     }
-    Promise.all([loadSummary(),loadWaveDist(),loadTrend(),loadPlayers()]);
+    async function loadHeatmap() {
+      const container = document.getElementById('heatmap-container');
+      try {
+        const d = await fetch('/analytics/heatmap').then(r=>r.json());
+        if (!d.image) {
+          container.innerHTML = '<span style="color:#2a3048;letter-spacing:2px;font-size:13px;">NO DEATH DATA YET — PLAY THE GAME</span>';
+          return;
+        }
+        container.innerHTML = `
+          <div style="width:100%">
+            <img src="data:image/png;base64,${d.image}"
+                 style="width:100%;border-radius:8px;border:1px solid #1e2438;"
+                 alt="Death Heatmap"/>
+            <div style="color:#4a5570;font-size:11px;letter-spacing:2px;margin-top:8px;text-align:right">
+              ${d.count} DEATH${d.count !== 1 ? 'S' : ''} RECORDED
+            </div>
+          </div>`;
+      } catch(e) {
+        container.innerHTML = '<span style="color:#2a3048">HEATMAP UNAVAILABLE</span>';
+      }
+    }
+    Promise.all([loadSummary(),loadWaveDist(),loadTrend(),loadHeatmap(),loadPlayers()]);
   </script>
 </body>
 </html>"""

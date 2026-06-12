@@ -339,6 +339,10 @@ class Game:
             kills_snap = self.kills
             gameover   = self.gameover
 
+            # Capture death location for heatmap
+            death_x = int(self.player.x) if self.player else self.ww // 2
+            death_y = int(self.player.y) if self.player else self.wh // 2
+
             wave_history_snap = list(self.waves._wave_history)
 
             def _delayed_post():
@@ -350,6 +354,8 @@ class Game:
                 ai_text = gameover._ai_text
                 self._post_score(player_name_store.name, score_snap, wave_snap, kills_snap,
                                  ai_text)
+                # Post death location for heatmap
+                self._post_death_location(death_x, death_y, wave_snap)
                 # Store run in RAG vector memory for future sessions
                 rag_director.get().store_run(
                     player_name  = player_name_store.name,
@@ -362,6 +368,24 @@ class Game:
 
             threading.Thread(target=_delayed_post, daemon=True).start()
         self.state = new_state
+
+    def _post_death_location(self, x: int, y: int, wave: int) -> None:
+        """Post death coordinates to backend for heatmap generation."""
+        try:
+            data = json.dumps({
+                "x": x, "y": y, "wave": wave,
+                "world_w": self.ww, "world_h": self.wh,
+            }).encode()
+            req = urllib.request.Request(
+                "https://deadzone-production-759b.up.railway.app/heatmap/death",
+                data=data,
+                headers={"Content-Type": "application/json"},
+                method="POST"
+            )
+            urllib.request.urlopen(req, timeout=5)
+            print(f"[HEATMAP] Death logged at ({x}, {y}) wave {wave}")
+        except Exception as e:
+            print(f"[HEATMAP] Log failed: {e}")
 
     # ── Main update ──────────────────────────────────────────────────────────
 
