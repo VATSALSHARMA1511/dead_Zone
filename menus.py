@@ -642,126 +642,329 @@ Use the exact numbers. End with one sentence starting with "NEXT TIME:" giving o
                 btn.draw(surface)
 
 
-# ─── Name Entry Screen ────────────────────────────────────────────────────────
+# ─── Auth Screen (Login / Register / Guest) ──────────────────────────────────
 
-class NameEntryScreen:
+class AuthScreen:
     """
-    Simple text input screen shown before sprite picker.
-    Player types their name (max 12 chars), hits ENTER or clicks CONFIRM.
-    Stores result in player_name_store.name.
+    Replaces the old NameEntryScreen.
+    Three modes: LOGIN, REGISTER, GUEST.
+    - LOGIN/REGISTER: hits Railway backend, stores JWT in player_name_store
+    - GUEST: skips auth, sets name only, is_guest=True
+    All auth calls run in a background thread so the UI never freezes.
     """
 
-    MAX_LEN = 12
+    MAX_LEN  = 20
+    BASE_URL = "https://deadzone-production-759b.up.railway.app"
 
     def __init__(self, screen_w: int, screen_h: int) -> None:
         self.sw, self.sh = screen_w, screen_h
         pygame.font.init()
 
-        self._font_title  = pygame.font.SysFont("consolas,monospace", 48, bold=True)
-        self._font_input  = pygame.font.SysFont("consolas,monospace", 42, bold=True)
-        self._font_hint   = pygame.font.SysFont("consolas,monospace", 16)
-        self._font_btn    = pygame.font.SysFont("consolas,monospace", 22, bold=True)
+        self._font_title = pygame.font.SysFont("consolas,monospace", 44, bold=True)
+        self._font_input = pygame.font.SysFont("consolas,monospace", 28, bold=True)
+        self._font_hint  = pygame.font.SysFont("consolas,monospace", 15)
+        self._font_btn   = pygame.font.SysFont("consolas,monospace", 20, bold=True)
+        self._font_sm    = pygame.font.SysFont("consolas,monospace", 14)
 
-        self._text        = ""
-        self._cursor_t    = 0.0
-        self._t           = 0.0
-        self._error       = ""
-        self._error_t     = 0.0
+        self._mode       = "choose"   # "choose" | "login" | "register" | "guest"
+        self._field      = "user"     # "user" | "pass"
+        self._username   = ""
+        self._password   = ""
+        self._cursor_t   = 0.0
+        self._t          = 0.0
+        self._status     = ""         # feedback message
+        self._status_col = settings.C_MID_GRAY
+        self._status_t   = 0.0
+        self._loading    = False      # thread in flight
+        self._result     = None       # set by thread: "ok" or "err:message"
 
         cx = screen_w // 2
         cy = screen_h // 2
 
-        self._btn_confirm = _Button(cx, cy + 100, 240, 48, "CONFIRM",
-                                    self._font_btn, "confirm",
-                                    color_normal=(20, 60, 40), color_hover=(30, 110, 70),
-                                    text_color=settings.C_PLAYER_ACCENT)
-        self._btn_back    = _Button(cx, cy + 162, 200, 40, "BACK",
-                                    self._font_btn, "back",
-                                    color_normal=(30, 30, 40), color_hover=(50, 50, 70))
+        # Choose mode buttons
+        self._btn_login    = _Button(cx, cy - 40,  280, 52, "LOGIN",
+                                     self._font_btn, "login",
+                                     color_normal=(16, 40, 60), color_hover=(24, 70, 110),
+                                     text_color=settings.C_PLAYER_ACCENT)
+        self._btn_register = _Button(cx, cy + 28,  280, 52, "REGISTER",
+                                     self._font_btn, "register",
+                                     color_normal=(20, 50, 30), color_hover=(30, 90, 50),
+                                     text_color=settings.C_HEALTH_GOOD)
+        self._btn_guest    = _Button(cx, cy + 96,  280, 40, "PLAY AS GUEST",
+                                     self._font_btn, "guest",
+                                     color_normal=(25, 25, 35), color_hover=(40, 40, 60))
+
+        # Form buttons
+        self._btn_submit   = _Button(cx, cy + 120, 260, 48, "CONFIRM",
+                                     self._font_btn, "submit",
+                                     color_normal=(20, 60, 40), color_hover=(30, 110, 70),
+                                     text_color=settings.C_PLAYER_ACCENT)
+        self._btn_back     = _Button(cx, cy + 182, 200, 36, "BACK",
+                                     self._font_btn, "back",
+                                     color_normal=(30, 30, 40), color_hover=(50, 50, 70))
+
+    # ── Update / events ───────────────────────────────────────────────────────
 
     def update(self, dt: float) -> None:
         self._t        += dt
         self._cursor_t += dt
-        self._error_t   = max(0.0, self._error_t - dt)
+        self._status_t  = max(0.0, self._status_t - dt)
+
+        # Check thread result
+        if self._result is not None:
+            self._loading = False
+            if self._result == "ok":
+                pass   # game.py will read player_name_store and advance state
+            else:
+                self._show_status(self._result.replace("err:", ""), settings.C_ACCENT_RED)
+            self._result = None
+
         mp = pygame.mouse.get_pos()
-        self._btn_confirm.update(dt, mp)
-        self._btn_back.update(dt, mp)
+        if self._mode == "choose":
+            for btn in [self._btn_login, self._btn_register, self._btn_guest]:
+                btn.update(dt, mp)
+        else:
+            for btn in [self._btn_submit, self._btn_back]:
+                btn.update(dt, mp)
 
     def handle_event(self, event) -> str | None:
-        if event.type == pygame.KEYDOWN:
-            if event.key == pygame.K_RETURN or event.key == pygame.K_KP_ENTER:
-                return self._confirm()
-            elif event.key == pygame.K_ESCAPE:
-                return "back"
-            elif event.key == pygame.K_BACKSPACE:
-                self._text = self._text[:-1]
-            else:
-                char = event.unicode
-                if char and char.isprintable() and len(self._text) < self.MAX_LEN:
-                    self._text += char.upper()
+        # While loading, ignore input
+        if self._loading:
+            return None
 
-        if self._btn_confirm.handle_event(event) == "confirm":
-            return self._confirm()
-        if self._btn_back.handle_event(event) == "back":
-            return "back"
+        if self._mode == "choose":
+            if self._btn_login.handle_event(event)    == "login":
+                self._mode = "login";    return None
+            if self._btn_register.handle_event(event) == "register":
+                self._mode = "register"; return None
+            if self._btn_guest.handle_event(event)    == "guest":
+                self._mode = "guest";    return None
+
+        elif self._mode in ("login", "register"):
+            if event.type == pygame.KEYDOWN:
+                if event.key == pygame.K_TAB:
+                    self._field = "pass" if self._field == "user" else "user"
+                elif event.key == pygame.K_RETURN:
+                    return self._submit()
+                elif event.key == pygame.K_ESCAPE:
+                    self._reset(); return None
+                elif event.key == pygame.K_BACKSPACE:
+                    if self._field == "user":
+                        self._username = self._username[:-1]
+                    else:
+                        self._password = self._password[:-1]
+                else:
+                    char = event.unicode
+                    if char and char.isprintable():
+                        if self._field == "user" and len(self._username) < self.MAX_LEN:
+                            self._username += char
+                        elif self._field == "pass" and len(self._password) < self.MAX_LEN:
+                            self._password += char
+
+            if self._btn_submit.handle_event(event) == "submit":
+                return self._submit()
+            if self._btn_back.handle_event(event)   == "back":
+                self._reset(); return None
+
+            # Click to focus field
+            if event.type == pygame.MOUSEBUTTONDOWN:
+                cx, cy = self.sw // 2, self.sh // 2
+                user_rect = pygame.Rect(cx - 210, cy - 60, 420, 52)
+                pass_rect = pygame.Rect(cx - 210, cy + 10, 420, 52)
+                if user_rect.collidepoint(event.pos): self._field = "user"
+                if pass_rect.collidepoint(event.pos): self._field = "pass"
+
+        elif self._mode == "guest":
+            if event.type == pygame.KEYDOWN:
+                if event.key == pygame.K_RETURN:
+                    return self._confirm_guest()
+                elif event.key == pygame.K_ESCAPE:
+                    self._reset(); return None
+                elif event.key == pygame.K_BACKSPACE:
+                    self._username = self._username[:-1]
+                else:
+                    char = event.unicode
+                    if char and char.isprintable() and len(self._username) < self.MAX_LEN:
+                        self._username += char.upper()
+            if self._btn_submit.handle_event(event) == "submit":
+                return self._confirm_guest()
+            if self._btn_back.handle_event(event)   == "back":
+                self._reset(); return None
 
         return None
 
-    def _confirm(self) -> str | None:
-        name = self._text.strip()
+    # ── Auth logic ────────────────────────────────────────────────────────────
+
+    def _submit(self) -> str | None:
+        u = self._username.strip()
+        p = self._password.strip()
+        if not u:
+            self._show_status("Username required.", settings.C_ACCENT_RED); return None
+        if not p:
+            self._show_status("Password required.", settings.C_ACCENT_RED); return None
+        if len(u) < 3:
+            self._show_status("Username too short (min 3).", settings.C_ACCENT_RED); return None
+
+        self._loading = True
+        self._show_status("Connecting...", settings.C_MID_GRAY)
+
+        import threading
+        endpoint = "/auth/login" if self._mode == "login" else "/auth/register"
+        username, password = u, p
+
+        def _call():
+            try:
+                import urllib.request, json
+                body = json.dumps({"username": username, "password": password}).encode()
+                req  = urllib.request.Request(
+                    self.BASE_URL + endpoint,
+                    data=body,
+                    headers={"Content-Type": "application/json"},
+                    method="POST"
+                )
+                resp = urllib.request.urlopen(req, timeout=8)
+                data = json.loads(resp.read())
+                player_name_store.name     = data["username"]
+                player_name_store.token    = data["token"]
+                player_name_store.is_guest = False
+                self._result = "ok"
+            except urllib.error.HTTPError as e:
+                try:
+                    msg = json.loads(e.read()).get("detail", "Auth failed.")
+                except Exception:
+                    msg = f"Error {e.code}"
+                self._result = f"err:{msg}"
+            except Exception as ex:
+                self._result = f"err:Connection failed. ({ex})"
+
+        threading.Thread(target=_call, daemon=True).start()
+        return None
+
+    def _confirm_guest(self) -> str | None:
+        name = self._username.strip()
         if not name:
-            self._error   = "Enter a name first."
-            self._error_t = 2.5
+            self._show_status("Enter a name first.", settings.C_ACCENT_RED)
             return None
-        player_name_store.name = name[:self.MAX_LEN]
+        player_name_store.name     = name[:self.MAX_LEN]
+        player_name_store.token    = ""
+        player_name_store.is_guest = True
         return "confirm"
+
+    def _reset(self):
+        self._mode     = "choose"
+        self._field    = "user"
+        self._username = ""
+        self._password = ""
+        self._loading  = False
+        self._result   = None
+
+    def _show_status(self, msg: str, color) -> None:
+        self._status     = msg
+        self._status_col = color
+        self._status_t   = 4.0
+
+    # ── Check if auth succeeded (called by game.py) ───────────────────────────
+
+    @property
+    def auth_complete(self) -> bool:
+        """True when logged in or guest confirmed — game.py polls this."""
+        return not player_name_store.is_guest or (
+            player_name_store.is_guest and bool(player_name_store.name.strip())
+            and self._mode == "guest" and self._result is None and not self._loading
+        )
+
+    # ── Draw ──────────────────────────────────────────────────────────────────
 
     def draw(self, surface: pygame.Surface) -> None:
         surface.fill(settings.C_BG)
 
-        # Grid background
+        # Grid
         grid_surf = pygame.Surface((self.sw, self.sh), pygame.SRCALPHA)
-        spacing = 64
-        for x in range(0, self.sw + spacing, spacing):
+        for x in range(0, self.sw + 64, 64):
             pygame.draw.line(grid_surf, (*settings.C_GRID, 100), (x, 0), (x, self.sh))
-        for y in range(0, self.sh + spacing, spacing):
+        for y in range(0, self.sh + 64, 64):
             pygame.draw.line(grid_surf, (*settings.C_GRID, 100), (0, y), (self.sw, y))
         surface.blit(grid_surf, (0, 0))
 
         cx = self.sw // 2
         cy = self.sh // 2
 
-        # Title
-        title = self._font_title.render("ENTER YOUR NAME", True, settings.C_WHITE)
+        if self._mode == "choose":
+            self._draw_choose(surface, cx, cy)
+        elif self._mode in ("login", "register"):
+            self._draw_form(surface, cx, cy)
+        elif self._mode == "guest":
+            self._draw_guest(surface, cx, cy)
+
+        # Status message
+        if self._status_t > 0:
+            alpha = min(255, int(self._status_t * 120))
+            s = self._font_hint.render(self._status, True, self._status_col)
+            s.set_alpha(alpha)
+            surface.blit(s, (cx - s.get_width() // 2, cy + 230))
+
+    def _draw_choose(self, surface, cx, cy):
+        title = self._font_title.render("DEADZONE", True, settings.C_PLAYER)
         surface.blit(title, (cx - title.get_width() // 2, cy - 160))
+        sub = self._font_hint.render("IDENTIFY YOURSELF, SOLDIER", True, settings.C_MID_GRAY)
+        surface.blit(sub, (cx - sub.get_width() // 2, cy - 108))
+        self._btn_login.draw(surface)
+        self._btn_register.draw(surface)
+        self._btn_guest.draw(surface)
 
-        hint = self._font_hint.render(
-            f"Max {self.MAX_LEN} characters  •  Shows on leaderboard",
-            True, settings.C_MID_GRAY)
-        surface.blit(hint, (cx - hint.get_width() // 2, cy - 105))
+        guest_note = self._font_sm.render(
+            "Guest scores are saved but not linked to a profile.", True, (40, 45, 60))
+        surface.blit(guest_note, (cx - guest_note.get_width() // 2, cy + 148))
 
-        # Input box
-        box_w, box_h = 420, 64
-        box_x = cx - box_w // 2
-        box_y = cy - box_h // 2 - 10
+    def _draw_form(self, surface, cx, cy):
+        mode_label = "LOGIN" if self._mode == "login" else "CREATE ACCOUNT"
+        title = self._font_title.render(mode_label, True, settings.C_WHITE)
+        surface.blit(title, (cx - title.get_width() // 2, cy - 180))
 
-        pygame.draw.rect(surface, (14, 18, 28), (box_x, box_y, box_w, box_h), border_radius=6)
-        pygame.draw.rect(surface, settings.C_PLAYER, (box_x, box_y, box_w, box_h), 2, border_radius=6)
+        tab_hint = self._font_sm.render("TAB to switch fields  •  ENTER to confirm", True, settings.C_MID_GRAY)
+        surface.blit(tab_hint, (cx - tab_hint.get_width() // 2, cy - 130))
 
-        display = self._text
-        cursor_visible = int(self._cursor_t * 2) % 2 == 0
-        if cursor_visible:
-            display += "_"
+        # Username field
+        self._draw_input_field(surface, cx, cy - 60, "USERNAME",
+                               self._username, self._field == "user", False)
+        # Password field
+        self._draw_input_field(surface, cx, cy + 10, "PASSWORD",
+                               self._password, self._field == "pass", True)
 
-        text_surf = self._font_input.render(display, True, settings.C_PLAYER_ACCENT)
-        surface.blit(text_surf, (cx - text_surf.get_width() // 2,
-                                  box_y + box_h // 2 - text_surf.get_height() // 2))
+        if self._loading:
+            dots = "." * (int(self._t * 3) % 4)
+            ls = self._font_btn.render(f"AUTHENTICATING{dots}", True, settings.C_MID_GRAY)
+            surface.blit(ls, (cx - ls.get_width() // 2, cy + 80))
+        else:
+            self._btn_submit.draw(surface)
+            self._btn_back.draw(surface)
 
-        # Buttons
-        self._btn_confirm.draw(surface)
+    def _draw_guest(self, surface, cx, cy):
+        title = self._font_title.render("GUEST MODE", True, settings.C_ACCENT_GOLD)
+        surface.blit(title, (cx - title.get_width() // 2, cy - 180))
+        hint = self._font_hint.render("Enter a display name for the leaderboard", True, settings.C_MID_GRAY)
+        surface.blit(hint, (cx - hint.get_width() // 2, cy - 130))
+        self._draw_input_field(surface, cx, cy - 40, "YOUR NAME",
+                               self._username, True, False)
+        self._btn_submit.draw(surface)
         self._btn_back.draw(surface)
 
-        # Error
-        if self._error_t > 0:
-            err = self._font_hint.render(self._error, True, settings.C_ACCENT_RED)
-            surface.blit(err, (cx - err.get_width() // 2, cy + 210))
+    def _draw_input_field(self, surface, cx, cy, label, text, focused, hide_text):
+        box_w, box_h = 420, 52
+        bx = cx - box_w // 2
+
+        lbl = self._font_sm.render(label, True,
+                                    settings.C_PLAYER if focused else settings.C_MID_GRAY)
+        surface.blit(lbl, (bx, cy - 18))
+
+        border_col = settings.C_PLAYER if focused else (30, 35, 50)
+        pygame.draw.rect(surface, (12, 15, 22), (bx, cy, box_w, box_h), border_radius=5)
+        pygame.draw.rect(surface, border_col,   (bx, cy, box_w, box_h), 2, border_radius=5)
+
+        display = ("*" * len(text)) if hide_text else text
+        if focused and int(self._cursor_t * 2) % 2 == 0:
+            display += "_"
+
+        ts = self._font_input.render(display, True,
+                                      settings.C_PLAYER_ACCENT if focused else settings.C_WHITE)
+        surface.blit(ts, (bx + 12, cy + box_h // 2 - ts.get_height() // 2))

@@ -21,7 +21,7 @@ from waves import WaveManager
 from obstacle import Obstacle
 
 from hud import HUD
-from menus import MainMenu, PauseMenu, GameOverScreen, SpritePickerScreen, NameEntryScreen
+from menus import MainMenu, PauseMenu, GameOverScreen, SpritePickerScreen, AuthScreen
 import player_name_store
 import rag_director
 
@@ -47,7 +47,7 @@ class Game:
         self.pause_menu    = PauseMenu(self.sw, self.sh)
         self.gameover      = GameOverScreen(self.sw, self.sh)
         self.sprite_picker = SpritePickerScreen(self.sw, self.sh)
-        self.name_entry    = NameEntryScreen(self.sw, self.sh)
+        self.name_entry    = AuthScreen(self.sw, self.sh)
 
         # ── State ───────────────────────────────────────────────────────────
         self.state       = GameState.MAIN_MENU
@@ -291,6 +291,7 @@ class Game:
     # ── Score POST ───────────────────────────────────────────────────────────
 
     def _post_score(self, name, score, wave, kills, ai_review=""):
+        token = player_name_store.token
         def _send():
             try:
                 print(f"[POST] Sending score: {score}, wave: {wave}, kills: {kills}")
@@ -302,10 +303,13 @@ class Game:
                     "kills":     kills,
                     "ai_review": ai_review,
                 }).encode()
+                headers = {"Content-Type": "application/json"}
+                if token:
+                    headers["Authorization"] = f"Bearer {token}"
                 req = urllib.request.Request(
                     "https://deadzone-production-759b.up.railway.app/score",
                     data=data,
-                    headers={"Content-Type": "application/json"},
+                    headers=headers,
                     method="POST"
                 )
                 resp = urllib.request.urlopen(req, timeout=10)
@@ -389,10 +393,13 @@ class Game:
         self.name_entry.update(dt)
         for event in events:
             action = self.name_entry.handle_event(event)
-            if action == "confirm":
-                self.state = GameState.SPRITE_SELECT
-            elif action == "back":
+            if action == "back":
                 self.state = GameState.MAIN_MENU
+        # AuthScreen signals completion via player_name_store token or guest confirm
+        ns = player_name_store
+        if (not ns.is_guest and ns.token) or (ns.is_guest and ns.name and ns.name != "GUEST"):
+            self.state = GameState.SPRITE_SELECT
+            self.name_entry._reset() if hasattr(self.name_entry, '_reset') else None
 
     def _update_sprite_select(self, dt: float, events: list) -> None:
         self.sprite_picker.update(dt)
