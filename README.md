@@ -1,292 +1,226 @@
-# DEADZONE — Top-Down Zombie Survival Shooter
+# DEADZONE
 
-> A polished, fully modular 2D zombie survival shooter built with Python + Pygame.  
-> Built as an intermediate-level portfolio project showcasing clean game architecture.
+> A top-down neon tactical zombie survival shooter — built not as a game project, but as a **systems engineering project** using a game as the implementation surface.
 
 ![Python](https://img.shields.io/badge/Python-3.11+-blue)
-![Pygame](https://img.shields.io/badge/Pygame-2.5+-green)
-![License](https://img.shields.io/badge/License-MIT-yellow)
+![Pygame](https://img.shields.io/badge/Pygame-2.6+-green)
+![FastAPI](https://img.shields.io/badge/FastAPI-0.100+-teal)
+![PostgreSQL](https://img.shields.io/badge/PostgreSQL-Railway-blue)
+![Groq](https://img.shields.io/badge/LLM-Groq%20%2F%20LLaMA3-orange)
+![ChromaDB](https://img.shields.io/badge/RAG-ChromaDB-purple)
+
+**Live backend:** https://deadzone-production-759b.up.railway.app  
+**Leaderboard:** https://deadzone-production-759b.up.railway.app  
+**Analytics:** https://deadzone-production-759b.up.railway.app/analytics
 
 ---
 
-## Screenshot
+## What This Actually Is
+
+Most student game projects are a game loop with some sprites. This is different.
+
+DEADZONE implements a production-style AI pipeline, a deployed REST backend with JWT authentication, a RAG memory system, and a full analytics dashboard — the game is the interface through which all of these systems are demonstrated.
+
+---
+
+## System Architecture
 
 ```
- ╔══════════════════════════════════════════════════════╗
- ║  SCORE  12,450        WAVE  3           FPS 60       ║
- ╠══════════════════════════════════════════════════════╣
- ║                                                      ║
- ║   ·  ·  ·  ·  ·  ·  ·  ·  ·  ·  ·  ·  ·  ·  ·   ║
- ║                                                      ║
- ║          ◆ ━━━>    ●  ●  ●                          ║
- ║                                                      ║
- ╠══════════════════════════════════════════════════════╣
- ║  HP ████████░░   STAM ██████████   [PISTOL 10/12]  ║
- ╚══════════════════════════════════════════════════════╝
+┌─────────────────────────────────────────────────────────────────┐
+│                         GAME CLIENT                             │
+│                                                                 │
+│  ┌──────────┐    ┌──────────┐    ┌──────────┐    ┌──────────┐  │
+│  │  Auth    │───▶│  Game    │───▶│   HUD    │    │ Menus    │  │
+│  │  Screen  │    │  Loop    │    │  System  │    │ System   │  │
+│  └──────────┘    └────┬─────┘    └──────────┘    └──────────┘  │
+│                       │                                         │
+│         ┌─────────────┼─────────────┐                          │
+│         ▼             ▼             ▼                           │
+│  ┌──────────┐  ┌──────────┐  ┌──────────┐                      │
+│  │ Collision│  │  Wave    │  │Particles │                      │
+│  │  System  │  │ Manager  │  │  System  │                      │
+│  └──────────┘  └────┬─────┘  └──────────┘                      │
+│                     │                                           │
+└─────────────────────┼───────────────────────────────────────────┘
+                      │
+          ┌───────────┼───────────┐
+          ▼           ▼           ▼
+   ┌─────────────┐  ┌──────────┐  ┌──────────────┐
+   │  Groq API   │  │ChromaDB  │  │  FastAPI     │
+   │  LLaMA 3.3  │  │ RAG Store│  │  + PostgreSQL│
+   │  70B        │  │(local)   │  │  (Railway)   │
+   └─────────────┘  └──────────┘  └──────────────┘
 ```
 
 ---
 
-## Features
+## Core Systems
 
-### Core Gameplay
-- **WASD movement** with mouse aiming
-- **3 weapons**: Pistol, Shotgun, SMG — each with unique stats, fire rate, spread
-- **Ammo system** with manual reload (R key)
-- **Sprint** (Shift) with stamina drain/regen
-- **Dash** (Space) with cooldown + brief invincibility
-- **Invincibility frames** after taking damage
+### 1. AI Wave Director
+Every wave that ends triggers a background-threaded Groq API call. The director receives:
+- Current wave number
+- Per-wave stats: kills, damage taken, accuracy, time
+- Last 5 waves of run history with compositions
 
-### Enemy System
-- **4 zombie types**: Normal, Fast, Tank, Boss
-- Smooth chase AI with velocity smoothing
-- Zombie separation prevents pile-up clumping
-- Per-type attack rates, health pools, score values
+It returns a JSON wave composition (zombie count, type ratios, sector message) that is validated, normalized, and applied to the next wave. Boss waves are deterministic — the AI has no control over them.
 
-### Wave System
-- Escalating waves with configurable composition
-- Boss every 5th wave (crown-adorned with 600 HP)
-- Cooldown between waves with animated countdown
-- Score accumulates continuously (time + kills)
+```python
+# Wave-anchored difficulty floor — wave 10 cannot get 6 zombies
+min_zombies = max(6, 4 + next_wave * 2)
+max_zombies = min(60, 10 + next_wave * 4)
+```
 
-### Visual Polish
-- Smooth delta-time movement everywhere
-- Screen shake on player damage
-- Muzzle flash + bullet trails
-- Blood splatter particles with gravity
-- Zombie death burst particles
-- Invincibility flicker effect
-- Smooth camera follow with lerp
-- Player dash trail effect
-- Animated main menu with grid + scanlines
-- Weapon slot HUD with ammo pips
-- Circular reload indicator on cursor
+### 2. RAG Persistent Memory
+Each completed run is converted to a natural language summary, embedded using `sentence-transformers/all-MiniLM-L6-v2`, and stored in a local ChromaDB vector database.
 
-### Architecture
-- Full separation of concerns across 12 files
-- Zero circular imports
-- Central settings.py for all tuning
-- Dead entity tombstone cleanup pattern
-- Pre-rendered world surface for performance
+Before generating each wave composition, ChromaDB is queried for semantically similar past runs using cosine similarity. The top 3 retrieved runs are injected into the Groq prompt as additional context.
+
+**The pipeline:**
+```
+Run ends
+  → Natural language summary generated
+  → Embedded (sentence-transformers, local)
+  → Stored in ChromaDB (persistent, ./deadzone_memory/)
+  
+Next wave requested
+  → Current session stats → query vector
+  → ChromaDB cosine similarity search
+  → Top 3 similar runs retrieved
+  → Injected into Groq prompt
+  → Wave composition generated with historical context
+```
+
+This is the same RAG architecture used in enterprise document Q&A systems.
+
+### 3. JWT Authentication
+Players register or login before playing. Credentials verified against PostgreSQL, passwords hashed with bcrypt. JWT tokens issued on success, stored in session, sent as `Authorization: Bearer` header on every score POST.
+
+```
+POST /auth/register  →  bcrypt hash + store  →  JWT token
+POST /auth/login     →  bcrypt verify        →  JWT token
+POST /score          →  JWT verify           →  link run to user_id
+GET  /player/<name>  →  fetch runs by user_id →  profile page
+```
+
+### 4. Collision System
+Centralised collision detection — all collision logic in one system, zero circular imports. Returns hit count per frame which feeds directly into accuracy tracking.
+
+```
+bullets ↔ zombies   → damage + hit count (for accuracy)
+player  ↔ zombies   → damage + iframes check
+zombie  ↔ zombie    → separation push (prevents stacking)
+player  ↔ obstacles → AABB resolution
+zombie  ↔ obstacles → AABB resolution (0.7 damping)
+```
+
+### 5. Wave Summary + Grading
+Between every wave, a summary panel displays kills, accuracy, and damage taken for the wave just completed. Each wave is graded S/A/B/C/D based on combined accuracy and damage metrics.
+
+### 6. Game Over AI Analysis
+On death, a separate Groq call generates a ~200 character tactical analysis of the run — specific, slightly sarcastic, referencing actual stats. Runs in a background thread. Stored to the database alongside the score.
 
 ---
 
-## Installation
+## Backend
 
-### Requirements
-- Python 3.11+
-- Pygame 2.5+
+**Deployed on Railway — PostgreSQL database, auto-deploy from GitHub.**
 
-### Setup
 
+## File Structure
+
+```
+├── main.py              — Entry point, pygame init, game loop
+├── game.py              — Core game loop, state machine, score posting
+├── player.py            — Player entity, weapons, dash, stamina
+├── zombie.py            — Zombie entity, type system, AI movement
+├── bullet.py            — Bullet entity, lifetime, velocity
+├── collision.py         — Centralised collision system (returns hit count)
+├── waves.py             — Wave manager, AI director, Groq integration
+├── rag_director.py      — RAG pipeline, ChromaDB, embeddings
+├── hud.py               — HUD rendering, wave summary, grading
+├── menus.py             — All screens: auth, sprite picker, game over
+├── camera.py            — Camera, screen shake, world↔screen transform
+├── particles.py         — Particle system, blood, muzzle flash
+├── obstacle.py          — Obstacle rendering and data
+├── settings.py          — All config values, colours, balance tuning
+├── constants.py         — Enums: GameState, ZombieType, WeaponSlot
+├── helpers.py           — Pure math/draw utilities
+├── sprite_store.py      — Module singleton for custom sprites
+├── player_name_store.py — Module singleton for session: name, token, is_guest
+├── server.py            — FastAPI backend (deployed on Railway)
+└── deadzone_memory/     — ChromaDB vector store (local, gitignored)
+```
+
+---
+
+## Tech Stack
+
+| Layer | Technology |
+|-------|-----------|
+| Game engine | Python, Pygame 2.6 |
+| LLM API | Groq (llama-3.3-70b-versatile) |
+| Vector DB | ChromaDB |
+| Embeddings | sentence-transformers (all-MiniLM-L6-v2) |
+| Backend | FastAPI |
+| Database | PostgreSQL |
+| Auth | JWT (python-jose) + bcrypt |
+| Deployment | Railway |
+
+---
+
+## Running Locally
+
+### Prerequisites
 ```bash
-# Clone the repo
-git clone https://github.com/yourname/deadzone.git
-cd deadzone
+pip install pygame fastapi psycopg2 groq chromadb sentence-transformers \
+            python-dotenv uvicorn bcrypt python-jose[cryptography]
+```
 
-# Install dependency
-pip install pygame
+### Environment variables
+Create a `.env` file:
+```
+GROQ_API_KEY=your_groq_api_key
+DATABASE_URL=postgresql://...  # Railway provides this automatically
+JWT_SECRET=your-secret-key
+```
 
-# Run
+### Run the game
+```bash
 python main.py
 ```
+
+### Run the backend locally
+```bash
+uvicorn server:app --reload
+```
+
+---
+
+## Balance Tuning
+
+All values in `settings.py`:
+
+| Setting | Effect |
+|---------|--------|
+| `WAVE_COUNT_SCALE` | Zombie count growth per wave |
+| `WAVE_BOSS_EVERY` | Boss wave frequency (default: 5) |
+| `WAVE_COOLDOWN` | Seconds between waves |
+| `PLAYER_DASH_COOLDOWN` | Dash recharge time |
+| `PLAYER_IFRAMES` | Invincibility window after hit |
+| `WEAPONS[*].fire_rate` | Fire rate per weapon |
+| `ZOMBIE_TYPES[*].speed` | Base speed per type |
 
 ---
 
 ## Controls
 
-| Key / Input        | Action              |
-|--------------------|---------------------|
-| WASD / Arrow Keys  | Move                |
-| Mouse              | Aim                 |
-| Left Mouse Button  | Shoot               |
-| Shift              | Sprint              |
-| Space              | Dash                |
-| R                  | Reload              |
-| 1 / 2 / 3          | Switch weapon slot  |
-| Scroll Wheel       | Cycle weapon        |
-| ESC                | Pause               |
-
----
-
-## Project Structure
-
-```
-deadzone/
-│
-├── main.py              ← Entry point + game loop
-├── game.py              ← Game orchestrator + state machine
-├── settings.py          ← All constants, tuning values, colors
-│
-├── entities/
-│   ├── player.py        ← Player: movement, shooting, weapons, health
-│   ├── zombie.py        ← Zombie: AI, types, health, drawing
-│   └── bullet.py        ← Projectile entity
-│
-├── systems/
-│   ├── camera.py        ← Smooth-follow camera + screen shake
-│   ├── collision.py     ← Centralised collision detection/resolution
-│   ├── particles.py     ← Blood, muzzle flash, death effects
-│   └── waves.py         ← Wave spawning and difficulty scaling
-│
-├── ui/
-│   ├── hud.py           ← In-game HUD (health, ammo, score, wave)
-│   └── menus.py         ← Main menu, pause, game over screens
-│
-├── utils/
-│   ├── helpers.py       ← Math utilities (vectors, collision, drawing)
-│   └── constants.py     ← Enums (GameState, ZombieType)
-│
-└── assets/
-    ├── sounds/          ← .wav SFX files (optional, game runs without)
-    ├── music/           ← ambient.ogg (optional)
-    └── sprites/         ← Reserved for future sprite sheets
-```
-
----
-
-## Architecture Deep-Dive
-
-### Update Loop Order (per frame)
-```
-main.py:clock.tick()
-  → game.update(dt, events)
-      1. Parse events → intent booleans
-      2. player.update() → returns new bullets
-      3. zombie.update() for each zombie
-      4. bullet.update() for each bullet
-      5. collision.process() → mutates entities
-      6. Dead entity cleanup + score accounting
-      7. waves.update() → may spawn new zombies
-      8. camera.update()
-      9. particles.update()
-     10. hud.update()
-  → game.draw(fps)
-      1. Blit pre-rendered world surface (fast)
-      2. Draw bullets
-      3. Draw zombies (frustum-culled)
-      4. Draw player
-      5. Draw particles
-      6. Draw HUD / menus (screen-space)
-```
-
-### System Communication
-```
-game.py ←→ player       (reads position, passes input booleans)
-game.py ←→ bullets      (appends player-created bullets, owns list)
-game.py ←→ zombies      (owns list, passes to wave/collision)
-game.py ←→ collision    (passes all entity refs, collision mutates)
-game.py ←→ camera       (passes player position, reads for world→screen)
-game.py ←→ particles    (calls spawn methods, passes cam to draw)
-game.py ←→ waves        (passes zombie list ref for appending + counting)
-game.py ←→ hud          (reads player/wave state, never mutates)
-menus   →  game.py      (returns string action signals, never mutate state)
-```
-
----
-
-## Adding Audio
-
-Drop WAV/OGG files into `assets/sounds/` and `assets/music/`. See `assets/README.md` for filenames. The game runs silently without them.
-
-**Free resources:**
-- SFX: [jsfxr](https://sfxr.me/) (browser, free)
-- Music: [OpenGameArt.org](https://opengameart.org/)
-
----
-
-## Packaging as Executable
-
-### PyInstaller (recommended)
-
-```bash
-pip install pyinstaller
-
-# Single-file EXE (Windows)
-pyinstaller --onefile --windowed --name=deadzone main.py
-
-# Include assets
-pyinstaller --onefile --windowed --name=deadzone \
-  --add-data "assets;assets" main.py
-
-# Output: dist/deadzone.exe
-```
-
-### Nuitka (faster binary)
-
-```bash
-pip install nuitka
-nuitka --standalone --onefile --windows-disable-console main.py
-```
-
----
-
-## Tuning & Balance
-
-All balance values are in `settings.py`. Key knobs:
-
-| Setting                   | Effect                          |
-|---------------------------|---------------------------------|
-| `WAVE_COUNT_SCALE`        | Zombie count growth per wave    |
-| `WAVE_BOSS_EVERY`         | Boss wave frequency             |
-| `ZOMBIE_TYPES[*].speed`   | Per-type movement speed         |
-| `PLAYER_IFRAMES`          | Invincibility window (seconds)  |
-| `PLAYER_DASH_COOLDOWN`    | Dash recharge time              |
-| `WEAPONS[*].fire_rate`    | Shots per second (lower = faster)|
-| `CAMERA_LERP`             | Camera smoothness               |
-| `SCREEN_SHAKE_DECAY`      | Shake falloff rate              |
-
----
-
-## Future Expansion Ideas
-
-### Short-term
-- [ ] Pickup items (health pack, ammo crate)
-- [ ] XP system with level-up stat boosts
-- [ ] Minimap (simple dot representation)
-- [ ] Kill streak multiplier
-- [ ] High score persistence (JSON save file)
-
-### Medium-term
-- [ ] Obstacle/wall system with pathfinding (A*)
-- [ ] More zombie types (exploder, ranged spitter)
-- [ ] Weapon drops from boss kills
-- [ ] Animated sprite sheets (replace procedural drawing)
-- [ ] Controller support
-
-### Long-term
-- [ ] Multiple arenas / map selection
-- [ ] Roguelite meta-progression
-- [ ] Local co-op (split screen)
-- [ ] Steam integration via Pygame CE
-
----
-
-## Performance Notes
-
-Current approach supports ~200 zombies at 60 FPS on modest hardware.
-
-**If you need more entities:**
-1. Replace `list` with a simple spatial grid hash in `collision.py`
-2. Batch particle draws into a single surface per frame
-3. Use `pygame.sprite.Group` with dirty-rect rendering for static entities
-4. Profile with `cProfile`: `python -m cProfile -s cumtime main.py`
-
----
-
-## Refactoring for Larger Scale
-
-| Current pattern        | At scale, replace with               |
-|------------------------|--------------------------------------|
-| Entity lists in game.py| EntityManager with type-keyed dicts  |
-| Direct attribute access| Property-based interfaces            |
-| String game states     | Already using IntEnum ✓              |
-| O(n²) collision        | Grid spatial hash                    |
-| pygame.font.SysFont    | Bundled TTF font via pygame.font.Font|
-| Manual sound loading   | SoundManager with pooled channels    |
-
----
-
-## License
-
-MIT — use freely in your own projects, learning, or portfolio.
+| Key | Action |
+|-----|--------|
+| WASD | Move |
+| Shift | Sprint |
+| Space | Dash (iframes) |
+| LMB | Shoot |
+| R | Reload |
+| 1 / 2 / 3 | Switch weapon |
+| Scroll | Switch weapon |
+| ESC | Pause |
