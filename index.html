@@ -162,11 +162,22 @@ section{position:relative;z-index:1;padding:6rem 3rem}
 
 .features-content{display:flex;flex-direction:column;gap:0}
 .feature-block{
-  min-height:70vh;display:flex;align-items:center;
+  min-height:70vh;display:grid;grid-template-columns:1fr 1fr;gap:4rem;align-items:center;
   padding:4rem 0;opacity:0.25;transition:opacity 0.5s;
 }
 .feature-block.visible{opacity:1}
-.feature-inner{max-width:580px}
+.feature-inner{max-width:480px}
+.feature-panel{border:1px solid var(--border);border-radius:3px;background:var(--bg3);padding:1.5rem;display:flex;flex-direction:column;gap:0}
+.feature-panel-label{font-family:var(--mono);font-size:10px;letter-spacing:0.25em;color:var(--muted);border-bottom:1px solid var(--border);padding-bottom:0.75rem;margin-bottom:0.75rem}
+.fp-stat{display:flex;justify-content:space-between;align-items:baseline;padding:0.45rem 0;border-bottom:1px solid rgba(255,255,255,0.03)}
+.fp-stat:last-child{border-bottom:none}
+.fp-key{font-family:var(--mono);font-size:11px;color:var(--muted);letter-spacing:0.1em}
+.fp-val{font-family:var(--mono);font-size:13px;color:var(--cyan)}
+.fp-wbar-row{display:flex;align-items:center;gap:10px;padding:5px 0}
+.fp-wbar-track{flex:1;height:1px;background:var(--border)}
+.fp-wbar-fill{height:100%;background:var(--cyan);transition:width 1.2s cubic-bezier(0.16,1,0.3,1)}
+.fp-wbar-lbl{font-family:var(--mono);font-size:10px;color:var(--muted);width:20px}
+.fp-wbar-num{font-family:var(--mono);font-size:10px;color:#444;width:16px;text-align:right}
 .feature-number{
   font-family:var(--mono);font-size:11px;letter-spacing:0.3em;
   color:var(--cyan);opacity:0.5;margin-bottom:1rem;
@@ -377,6 +388,16 @@ footer a:hover{color:var(--cyan)}
             <span class="tag">VALIDATED OUTPUT</span>
           </div>
         </div>
+        <div class="feature-panel">
+          <div class="feature-panel-label">LIVE — LAST AI DIRECTIVE</div>
+          <div id="fp-ai-msg" style="font-family:var(--mono);font-size:12px;color:#666;line-height:1.7;font-style:italic;min-height:60px">LOADING...</div>
+          <div style="margin-top:1rem">
+            <div class="fp-stat"><span class="fp-key">MODEL</span><span class="fp-val">LLAMA-3.3-70B</span></div>
+            <div class="fp-stat"><span class="fp-key">TRIGGER</span><span class="fp-val">END OF WAVE</span></div>
+            <div class="fp-stat"><span class="fp-key">FALLBACK</span><span class="fp-val">DEFAULT MIX</span></div>
+            <div class="fp-stat"><span class="fp-key">BOSS WAVE</span><span class="fp-val">EVERY 5TH</span></div>
+          </div>
+        </div>
       </div>
 
       <div class="feature-block" data-index="1">
@@ -390,6 +411,15 @@ footer a:hover{color:var(--cyan)}
             <span class="tag">VECTOR SEARCH</span>
             <span class="tag">CROSS-SESSION</span>
           </div>
+        </div>
+        <div class="feature-panel">
+          <div class="feature-panel-label">RAG PIPELINE</div>
+          <div class="fp-stat"><span class="fp-key">EMBED MODEL</span><span class="fp-val">all-MiniLM-L6-v2</span></div>
+          <div class="fp-stat"><span class="fp-key">VECTOR STORE</span><span class="fp-val">CHROMADB</span></div>
+          <div class="fp-stat"><span class="fp-key">CONTEXT WINDOW</span><span class="fp-val">TOP 3 RUNS</span></div>
+          <div class="fp-stat"><span class="fp-key">PERSISTENCE</span><span class="fp-val">CROSS-SESSION</span></div>
+          <div class="fp-stat"><span class="fp-key">HISTORY</span><span class="fp-val">LAST 5 WAVES</span></div>
+          <div class="fp-stat"><span class="fp-key">FALLBACK</span><span class="fp-val">GRACEFUL</span></div>
         </div>
       </div>
 
@@ -405,6 +435,15 @@ footer a:hover{color:var(--cyan)}
             <span class="tag">RAILWAY</span>
           </div>
         </div>
+        <div class="feature-panel">
+          <div class="feature-panel-label">LIVE — SERVER STATS</div>
+          <div class="fp-stat"><span class="fp-key">TOTAL RUNS</span><span class="fp-val" id="fp-runs">—</span></div>
+          <div class="fp-stat"><span class="fp-key">PLAYERS</span><span class="fp-val" id="fp-players">—</span></div>
+          <div class="fp-stat"><span class="fp-key">BEST SCORE</span><span class="fp-val" id="fp-score">—</span></div>
+          <div class="fp-stat"><span class="fp-key">BEST WAVE</span><span class="fp-val" id="fp-wave">—</span></div>
+          <div class="fp-stat"><span class="fp-key">HOST</span><span class="fp-val">RAILWAY</span></div>
+          <div class="fp-stat"><span class="fp-key">DB</span><span class="fp-val">POSTGRESQL</span></div>
+        </div>
       </div>
 
       <div class="feature-block" data-index="3">
@@ -417,6 +456,15 @@ footer a:hover{color:var(--cyan)}
             <span class="tag">SCIPY GAUSSIAN</span>
             <span class="tag">WAVE DISTRIBUTION</span>
             <span class="tag">SCORE TRENDS</span>
+          </div>
+        </div>
+        <div class="feature-panel" style="padding:0;overflow:hidden">
+          <div id="fp-heatmap" style="min-height:200px;display:flex;align-items:center;justify-content:center">
+            <span style="font-family:var(--mono);font-size:11px;letter-spacing:0.2em;color:var(--muted)">LOADING...</span>
+          </div>
+          <div style="padding:0.75rem 1rem;border-top:1px solid var(--border);display:flex;justify-content:space-between">
+            <span style="font-family:var(--mono);font-size:10px;letter-spacing:0.15em;color:var(--muted)">DEATH HEATMAP</span>
+            <span id="fp-heatmap-count" style="font-family:var(--mono);font-size:10px;color:#444">—</span>
           </div>
         </div>
       </div>
@@ -432,6 +480,15 @@ footer a:hover{color:var(--cyan)}
             <span class="tag">4 ZOMBIE TYPES</span>
             <span class="tag">PARTICLE SYSTEM</span>
           </div>
+        </div>
+        <div class="feature-panel">
+          <div class="feature-panel-label">GAME SYSTEMS</div>
+          <div class="fp-stat"><span class="fp-key">WEAPONS</span><span class="fp-val">PISTOL / SHOTGUN / SMG</span></div>
+          <div class="fp-stat"><span class="fp-key">ZOMBIE TYPES</span><span class="fp-val">NORMAL / FAST / TANK / BOSS</span></div>
+          <div class="fp-stat"><span class="fp-key">WORLD SIZE</span><span class="fp-val">3200 × 2400px</span></div>
+          <div class="fp-stat"><span class="fp-key">SECTORS</span><span class="fp-val">3×3 PROCEDURAL</span></div>
+          <div class="fp-stat"><span class="fp-key">COLLISION</span><span class="fp-val">CENTRALISED AABB</span></div>
+          <div class="fp-stat"><span class="fp-key">WAVE SCALING</span><span class="fp-val">+8% SPEED / WAVE</span></div>
         </div>
       </div>
 
@@ -477,11 +534,11 @@ footer a:hover{color:var(--cyan)}
     <div class="reveal" style="margin-bottom:3rem">
       <p class="section-label">INTELLIGENCE</p>
       <h2 class="section-title">Analytics <span>Dashboard</span></h2>
-      <p class="section-body">Real-time data on every run ever played — wave deaths, score trends, and a server-side death heatmap.</p>
+      <p class="section-body">Real-time data on every run ever played — refreshes automatically.</p>
     </div>
 
     <!-- stat cards -->
-    <div class="analytics-cards reveal" id="analytics-cards" style="margin-bottom:4rem">
+    <div class="analytics-cards reveal" id="analytics-cards" style="margin-bottom:2.5rem">
       <div class="acard">
         <div class="acard-label">TOTAL RUNS</div>
         <div class="acard-val" id="ac-runs">—</div>
@@ -491,27 +548,37 @@ footer a:hover{color:var(--cyan)}
         <div class="acard-val" id="ac-players">—</div>
       </div>
       <div class="acard">
-        <div class="acard-label">AVG WAVE REACHED</div>
+        <div class="acard-label">AVG WAVE</div>
         <div class="acard-val" id="ac-avgwave">—</div>
       </div>
       <div class="acard">
-        <div class="acard-label">BEST SCORE EVER</div>
+        <div class="acard-label">BEST SCORE</div>
         <div class="acard-val" id="ac-bestscore">—</div>
       </div>
     </div>
 
-    <!-- wave distribution -->
-    <div class="reveal" style="margin-bottom:4rem">
-      <p class="section-label" style="margin-bottom:1.5rem">WAVE DISTRIBUTION — WHERE PLAYERS DIE</p>
-      <div id="home-wave-bars" style="display:flex;flex-direction:column;gap:10px"></div>
-    </div>
+    <!-- two col: wave bars + heatmap -->
+    <div class="reveal" style="display:grid;grid-template-columns:1fr 1fr;gap:1.5rem;margin-bottom:2.5rem">
 
-    <!-- heatmap -->
-    <div class="reveal" style="margin-bottom:3rem">
-      <p class="section-label" style="margin-bottom:1.5rem">DEATH HEATMAP</p>
-      <div id="home-heatmap" style="min-height:80px;display:flex;align-items:center;justify-content:center">
-        <span style="font-family:var(--mono);font-size:12px;letter-spacing:0.2em;color:var(--muted)">LOADING...</span>
+      <!-- wave distribution -->
+      <div style="border:1px solid var(--border);border-radius:3px;background:var(--bg3);padding:1.5rem">
+        <p style="font-family:var(--mono);font-size:10px;letter-spacing:0.25em;color:var(--muted);border-bottom:1px solid var(--border);padding-bottom:0.75rem;margin-bottom:1rem">WAVE DISTRIBUTION — WHERE PLAYERS DIE</p>
+        <div id="home-wave-bars" style="display:flex;flex-direction:column;gap:10px">
+          <span style="font-family:var(--mono);font-size:11px;color:var(--muted);letter-spacing:0.15em">LOADING...</span>
+        </div>
       </div>
+
+      <!-- heatmap -->
+      <div style="border:1px solid var(--border);border-radius:3px;background:var(--bg3);display:flex;flex-direction:column">
+        <p style="font-family:var(--mono);font-size:10px;letter-spacing:0.25em;color:var(--muted);border-bottom:1px solid var(--border);padding:1rem 1.5rem;margin:0">DEATH HEATMAP</p>
+        <div id="home-heatmap" style="flex:1;display:flex;align-items:center;justify-content:center;padding:1rem;min-height:180px">
+          <span style="font-family:var(--mono);font-size:11px;letter-spacing:0.2em;color:var(--muted)">LOADING...</span>
+        </div>
+        <div style="padding:0.6rem 1.5rem;border-top:1px solid var(--border);display:flex;justify-content:flex-end">
+          <span id="heatmap-count" style="font-family:var(--mono);font-size:10px;color:#444;letter-spacing:0.15em">—</span>
+        </div>
+      </div>
+
     </div>
 
     <div class="reveal" style="text-align:center">
@@ -672,8 +739,7 @@ setInterval(loadLeaderboard,15000);
 // ── FETCH ANALYTICS SUMMARY ──
 async function loadAnalytics(){
   try{
-    const r=await fetch('/analytics/summary');
-    const d=await r.json();
+    const d=await fetch('/analytics/summary').then(r=>r.json());
     document.getElementById('stat-runs').textContent=d.total_runs??'—';
     document.getElementById('stat-players').textContent=d.unique_players??'—';
     document.getElementById('stat-wave').textContent=d.best_wave??'—';
@@ -682,56 +748,90 @@ async function loadAnalytics(){
     document.getElementById('ac-players').textContent=d.unique_players??'—';
     document.getElementById('ac-avgwave').textContent=d.avg_wave??'—';
     document.getElementById('ac-bestscore').textContent=d.best_score?.toLocaleString()??'—';
+    // feature panel 03
+    const fr=document.getElementById('fp-runs');
+    const fp=document.getElementById('fp-players');
+    const fs=document.getElementById('fp-score');
+    const fw=document.getElementById('fp-wave');
+    if(fr)fr.textContent=d.total_runs??'—';
+    if(fp)fp.textContent=d.unique_players??'—';
+    if(fs)fs.textContent=d.best_score?.toLocaleString()??'—';
+    if(fw)fw.textContent=d.best_wave??'—';
   }catch(e){}
 }
-loadAnalytics();
 
 // ── WAVE DISTRIBUTION ──
 async function loadWaveDist(){
   try{
     const data=await fetch('/analytics/wave-distribution').then(r=>r.json());
     const container=document.getElementById('home-wave-bars');
-    if(!data.length){container.innerHTML='<span style="font-family:var(--mono);font-size:12px;color:var(--muted);letter-spacing:0.2em">NO DATA YET</span>';return;}
+    if(!data||!data.length){
+      container.innerHTML='<span style="font-family:var(--mono);font-size:11px;color:var(--muted);letter-spacing:0.15em">NO DATA YET</span>';
+      return;
+    }
     const max=Math.max(...data.map(d=>d.runs));
-    // cyan to red gradient across waves
     const colors=['#00f5d4','#00d4a8','#00b07a','#f5a623','#f57623','#ff3b3b'];
     container.innerHTML=data.map((d,i)=>`
-      <div class="wbar-row">
-        <span class="wbar-label">W${d.wave}</span>
-        <div class="wbar-track">
-          <div class="wbar-fill" style="width:0%;background:${colors[Math.min(i,colors.length-1)]}" data-pct="${(d.runs/max*100).toFixed(1)}"></div>
+      <div class="fp-wbar-row">
+        <span class="fp-wbar-lbl">W${d.wave}</span>
+        <div class="fp-wbar-track">
+          <div class="fp-wbar-fill" style="width:0%;background:${colors[Math.min(i,colors.length-1)]}" data-pct="${(d.runs/max*100).toFixed(1)}"></div>
         </div>
-        <span class="wbar-count">${d.runs}</span>
+        <span class="fp-wbar-num">${d.runs}</span>
       </div>`).join('');
-    // animate bars in after a tick
     setTimeout(()=>{
-      container.querySelectorAll('.wbar-fill').forEach(el=>{
-        el.style.width=el.dataset.pct+'%';
-      });
-    },200);
+      container.querySelectorAll('.fp-wbar-fill').forEach(el=>{el.style.width=el.dataset.pct+'%'});
+    },300);
   }catch(e){}
 }
-loadWaveDist();
 
-// ── DEATH HEATMAP ──
+// ── DEATH HEATMAP (auto-refresh every 15s) ──
 async function loadHeatmap(){
   const container=document.getElementById('home-heatmap');
+  const fpContainer=document.getElementById('fp-heatmap');
   try{
     const d=await fetch('/analytics/heatmap').then(r=>r.json());
     if(!d.image){
-      container.innerHTML='<span style="font-family:var(--mono);font-size:12px;letter-spacing:0.2em;color:var(--muted)">NO DEATH DATA YET — PLAY THE GAME</span>';
+      const msg='<span style="font-family:var(--mono);font-size:11px;letter-spacing:0.2em;color:var(--muted)">NO DATA YET</span>';
+      if(container)container.innerHTML=msg;
+      if(fpContainer)fpContainer.innerHTML=msg;
       return;
     }
-    container.innerHTML=`
-      <div style="width:100%">
-        <img src="data:image/png;base64,${d.image}" alt="Death Heatmap"/>
-        <div class="heatmap-meta">${d.count} DEATH${d.count!==1?'S':''} RECORDED</div>
-      </div>`;
+    const img=`<img src="data:image/png;base64,${d.image}" style="width:100%;display:block;border-radius:2px" alt="Death Heatmap"/>`;
+    if(container)container.innerHTML=img;
+    if(fpContainer)fpContainer.innerHTML=img;
+    const countEl=document.getElementById('heatmap-count');
+    const fpCountEl=document.getElementById('fp-heatmap-count');
+    const countTxt=`${d.count} DEATH${d.count!==1?'S':''} RECORDED`;
+    if(countEl)countEl.textContent=countTxt;
+    if(fpCountEl)fpCountEl.textContent=countTxt;
   }catch(e){
-    container.innerHTML='<span style="font-family:var(--mono);font-size:12px;letter-spacing:0.2em;color:var(--muted)">HEATMAP UNAVAILABLE</span>';
+    const msg='<span style="font-family:var(--mono);font-size:11px;letter-spacing:0.2em;color:var(--muted)">UNAVAILABLE</span>';
+    if(container)container.innerHTML=msg;
+    if(fpContainer)fpContainer.innerHTML=msg;
   }
 }
+
+// ── AI LAST DIRECTIVE (pull from latest score's ai_review) ──
+async function loadAIMsg(){
+  try{
+    const data=await fetch('/scores').then(r=>r.json());
+    const el=document.getElementById('fp-ai-msg');
+    if(!el)return;
+    const latest=data.find(r=>r.ai_review&&r.ai_review.trim());
+    el.textContent=latest?latest.ai_review.slice(0,160)+(latest.ai_review.length>160?'…':''):'NO AI DIRECTIVES YET — PLAY A WAVE';
+  }catch(e){}
+}
+
+// ── INIT & AUTO-REFRESH ──
+loadAnalytics();
+loadWaveDist();
 loadHeatmap();
+loadAIMsg();
+setInterval(loadLeaderboard,15000);
+setInterval(loadHeatmap,15000);
+setInterval(loadAnalytics,30000);
+setInterval(loadWaveDist,30000);
 </script>
 </body>
 </html>
