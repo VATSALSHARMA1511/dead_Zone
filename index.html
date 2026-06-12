@@ -637,6 +637,44 @@ footer a:hover{color:var(--cyan)}
     {x:0.5,y:0.5,r:0.25,color:'rgba(255,59,59,0.03)'},
   ];
 
+  // Aurora ribbons — flowing wavy bands like SpectraNoise
+  const ribbons=[
+    {yBase:0.30, amp:0.10, freq:1.4, speed:0.6,  thickness:0.16, color:'rgba(0,245,212,0.10)'},
+    {yBase:0.55, amp:0.13, freq:1.0, speed:-0.45,thickness:0.20, color:'rgba(0,196,170,0.07)'},
+    {yBase:0.72, amp:0.08, freq:1.8, speed:0.35, thickness:0.12, color:'rgba(255,59,59,0.04)'},
+  ];
+
+  function drawAurora(){
+    ribbons.forEach(rb=>{
+      const grad=ctx.createLinearGradient(0,0,w,0);
+      grad.addColorStop(0,'transparent');
+      grad.addColorStop(0.5,rb.color);
+      grad.addColorStop(1,'transparent');
+
+      ctx.beginPath();
+      ctx.moveTo(0, h*(rb.yBase + Math.sin(t*rb.speed)*rb.amp));
+      const steps=24;
+      for(let i=1;i<=steps;i++){
+        const x=(w/steps)*i;
+        const phase=t*rb.speed + (x/w)*rb.freq*Math.PI*2;
+        const y=h*(rb.yBase + Math.sin(phase)*rb.amp);
+        ctx.lineTo(x,y);
+      }
+      // close band downward
+      for(let i=steps;i>=0;i--){
+        const x=(w/steps)*i;
+        const phase=t*rb.speed + (x/w)*rb.freq*Math.PI*2;
+        const y=h*(rb.yBase + Math.sin(phase)*rb.amp) + h*rb.thickness;
+        ctx.lineTo(x,y);
+      }
+      ctx.closePath();
+      ctx.fillStyle=grad;
+      ctx.filter='blur(40px)';
+      ctx.fill();
+      ctx.filter='none';
+    });
+  }
+
   function drawFrame(){
     ctx.clearRect(0,0,w,h);
     t+=0.003;
@@ -652,6 +690,9 @@ footer a:hover{color:var(--cyan)}
       ctx.fillStyle=g;
       ctx.fillRect(0,0,w,h);
     });
+
+    // Draw aurora ribbons
+    drawAurora();
 
     // Noise overlay
     const id=ctx.getImageData(0,0,w,h);
