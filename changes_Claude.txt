@@ -1,4 +1,6 @@
 DEADZONE — Full Project Context
+site : https://deadzone-production-4446.up.railway.app/
+
 What It Is
 Top-down neon tactical zombie survival shooter built in Python + Pygame. Production-style project with AI integration, deployed backend, and analytics. Built for portfolio/resume purposes targeting product company placements.
 
